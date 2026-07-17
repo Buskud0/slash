@@ -1,24 +1,54 @@
 local Input = {}
 
-function Input.get_movement()
-    local dx, dy = 0, 0
-    if love.keyboard.isDown("left") or love.keyboard.isDown("a") then dx = -1
-    elseif love.keyboard.isDown("right") or love.keyboard.isDown("d") then dx = 1 end
-    if love.keyboard.isDown("up") or love.keyboard.isDown("w") then dy = -1
-    elseif love.keyboard.isDown("down") or love.keyboard.isDown("s") then dy = 1 end
-    return dx, dy
+-- Key mappings to easily configure controls in one place
+local KEYMAP = {
+    left = {"left", "a"},
+    right = {"right", "d"},
+    up = {"up", "space"},
+    aim_up = {"w"},
+    aim_down = {"s"},
+    dash = {"lshift", "rshift"},
+    crouch = {"lctrl"},
+    attack = {"j", "x"},
+    stab = {"l"}
+}
+
+-- Helper function to check if any key in a list is pressed
+local function is_any_down(keys)
+    for _, key in ipairs(keys) do
+        if love.keyboard.isDown(key) then
+            return true
+        end
+    end
+    return false
 end
 
-function Input.get_jump()
-    return love.keyboard.isDown("up") or love.keyboard.isDown("w")
-end
+-- Returns a structured table representing the current logical state of the inputs.
+-- This keeps input polling clean and decoupled from game physics.
+function Input.get_state()
+    local dx = 0
+    if is_any_down(KEYMAP.left) then
+        dx = -1
+    elseif is_any_down(KEYMAP.right) then
+        dx = 1
+    end
 
-function Input.get_actions()
-    local dash = love.keyboard.isDown("lshift") or love.keyboard.isDown("rshift")
-    local s_held = love.keyboard.isDown("s") or love.keyboard.isDown("down")
-    local attack = love.keyboard.isDown("j") or love.keyboard.isDown("x")
-    local stab = love.keyboard.isDown("l")
-    return dash, s_held, s_held, attack, stab
+    local dy = 0
+    if is_any_down(KEYMAP.aim_up) then
+        dy = -1
+    elseif is_any_down(KEYMAP.aim_down) then
+        dy = 1
+    end
+
+    return {
+        dx = dx,
+        dy = dy,
+        jump = is_any_down(KEYMAP.up),
+        dash = is_any_down(KEYMAP.dash),
+        crouch = is_any_down(KEYMAP.crouch),
+        attack = is_any_down(KEYMAP.attack),
+        stab = is_any_down(KEYMAP.stab)
+    }
 end
 
 return Input

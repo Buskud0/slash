@@ -8,5 +8,29 @@ return {
     ZOOM = 3,
     SPEED = 120,
     GRAVITY = 500,
-    JUMP = -200
+    JUMP = -200,
+
+    -- Combat Constants
+    SWING_DURATION = 0.12,
+    STAB_DURATION = 0.15,
+    SWING_COOLDOWN = 0.25,
+    STAB_COOLDOWN = 0.30,
+    SWORD_LENGTH = 38,
+    SWING_DAMAGE = 10,
+    STAB_DAMAGE = 20,
+    MAX_HEALTH = 100,
+    SPAWN_X = 40,
+    SPAWN_Y = 50,
+
+    -- Dash Constants
+    DASH_DURATION = 0.12,
+    DASH_COOLDOWN = 0.8,
+    DASH_SPEED_MULTIPLIER = 2.5,
+
+    -- Physics Constants
+    KNOCKBACK_FORCE = 400,
+    KNOCKBACK_DECAY = 8,
+    GRAVITY_HIT_REDUCTION = 0.25,
+    GRAVITY_JUMP_RELEASE_MULTIPLIER = 3.0,
+    JUMP_COOLDOWN = 0.2
 }
