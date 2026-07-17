@@ -1,20 +1,19 @@
+local config = require "config"
+
 local Input = {}
 
--- Key mappings to easily configure controls in one place
 local KEYMAP = {
     left = {"left", "a"},
     right = {"right", "d"},
-    up = {"up", "space"},
-    aim_up = {"w"},
-    aim_down = {"s"},
-    dash = {"lshift", "rshift"},
-    crouch = {"lctrl"},
-    attack = {"j", "x"},
-    stab = {"l"}
+    up = {"up", "w"},
+    down = {"down", "s"},
+    jump = {"up", "w"},
+    crouch = {"down", "s"},
+    dash = {"lshift", "rshift"}
 }
 
--- Helper function to check if any key in a list is pressed
 local function is_any_down(keys)
+    if not keys then return false end
     for _, key in ipairs(keys) do
         if love.keyboard.isDown(key) then
             return true
@@ -23,31 +22,30 @@ local function is_any_down(keys)
     return false
 end
 
--- Returns a structured table representing the current logical state of the inputs.
--- This keeps input polling clean and decoupled from game physics.
 function Input.get_state()
     local dx = 0
-    if is_any_down(KEYMAP.left) then
-        dx = -1
-    elseif is_any_down(KEYMAP.right) then
-        dx = 1
-    end
+    if is_any_down(KEYMAP.left) then dx = dx - 1 end
+    if is_any_down(KEYMAP.right) then dx = dx + 1 end
 
     local dy = 0
-    if is_any_down(KEYMAP.aim_up) then
-        dy = -1
-    elseif is_any_down(KEYMAP.aim_down) then
-        dy = 1
-    end
+    if is_any_down(KEYMAP.up) then dy = dy - 1 end
+    if is_any_down(KEYMAP.down) then dy = dy + 1 end
+
+    local mx, my = love.mouse.getPosition()
+    local world_mouse_x = mx / config.ZOOM
+    local world_mouse_y = my / config.ZOOM
 
     return {
         dx = dx,
         dy = dy,
-        jump = is_any_down(KEYMAP.up),
+        jump = is_any_down(KEYMAP.jump),
         dash = is_any_down(KEYMAP.dash),
         crouch = is_any_down(KEYMAP.crouch),
-        attack = is_any_down(KEYMAP.attack),
-        stab = is_any_down(KEYMAP.stab)
+
+        attackStab = love.mouse.isDown(1),
+        attackSlash = love.mouse.isDown(2),
+        mouse_x = world_mouse_x,
+        mouse_y = world_mouse_y
     }
 end
 

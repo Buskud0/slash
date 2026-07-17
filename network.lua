@@ -24,19 +24,19 @@ function Network.send_chat(text)
 end
 
 -- Private Helper: Parses state updates broadcast by the server.
--- Packet format: "id,x,y,height,facing,attack_timer,attack_id,health|id2,x,y,height,facing,attack_timer,attack_id,health|..."
+-- Packet format: "id,x,y,height,facing,attack_timer,attack_type,attack_id,health|..."
 local function parse_state(payload)
     local active = {}
     for player_data in string.gmatch(payload, "([^|]+)") do
-        local id, px, py, ph, pf, pa, paid, phealth = player_data:match("([^,]+),([^,]+),([^,]+),([^,]+),([^,]+),([^,]+),([^,]+),([^,]+)")
-        if id and px and py and ph and pf and pa and paid and phealth then
+        local id, px, py, ph, pf, pa, pat, paid, phealth = player_data:match("([^,]+),([^,]+),([^,]+),([^,]+),([^,]+),([^,]+),([^,]+),([^,]+),([^,]+)")
+        if id and px and py and ph and pf and pa and pat and paid and phealth then
             active[id] = { 
                 x = tonumber(px), 
                 y = tonumber(py), 
                 height = tonumber(ph), 
-                -- Decode the integer value back to facing direction or float angle
                 facing = tonumber(pf) / 100, 
                 attack_timer = tonumber(pa) / 100,
+                attack_type = pat ~= "none" and pat or nil,
                 attack_id = tonumber(paid) or 0,
                 health = tonumber(phealth) or config.MAX_HEALTH
             }
@@ -57,13 +57,15 @@ function Network.update(local_player)
         -- Encode facing direction and attack timer (floats multiplied by 100)
         local facing = math.floor(local_player.facing * 100)
         local attack_timer = math.floor(local_player.attack_timer * 100)
+        local attack_type = local_player.attack_type or "none"
         
-        local payload = string.format("pos:%d,%d,%d,%d,%d,%d,%d", 
+        local payload = string.format("pos:%d,%d,%d,%d,%d,%s,%d,%d", 
             math.floor(local_player.x), 
             math.floor(local_player.y), 
             height, 
             facing, 
             attack_timer,
+            attack_type,
             local_player.attack_id or 0,
             local_player.health or config.MAX_HEALTH
         )

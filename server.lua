@@ -42,6 +42,7 @@ local function on_connect(id, peer)
         height = start_h, 
         facing = "1", 
         attacking = "0", 
+        attack_type = "none",
         attack_id = "0",
         health = tostring(config.MAX_HEALTH),
         peer = peer 
@@ -56,14 +57,15 @@ local function on_receive(id, data)
     if not client then return end
 
     if data:sub(1, 4) == "pos:" then
-        -- Format: "pos:x,y,height,facing,attacking,attack_id,health"
-        local x, y, h, f, a, aid, hp = data:sub(5):match("([^,]+),([^,]+),([^,]+),([^,]+),([^,]+),([^,]+),([^,]+)")
-        if x and y and h and f and a and aid and hp then
+        -- Format: "pos:x,y,height,facing,attack_timer,attack_type,attack_id,health"
+        local x, y, h, f, a, atype, aid, hp = data:sub(5):match("([^,]+),([^,]+),([^,]+),([^,]+),([^,]+),([^,]+),([^,]+),([^,]+)")
+        if x and y and h and f and a and atype and aid and hp then
             client.x = x
             client.y = y
             client.height = h
             client.facing = f
             client.attacking = a
+            client.attack_type = atype
             client.attack_id = aid
             client.health = hp
         end
@@ -105,9 +107,10 @@ local function broadcast_state()
         local h = pos.height or tostring(config.PLAYER_STAND_HEIGHT)
         local f = pos.facing or "1"
         local a = pos.attacking or "0"
+        local atype = pos.attack_type or "none"
         local aid = pos.attack_id or "0"
         local hp = pos.health or tostring(config.MAX_HEALTH)
-        state = state .. id .. "," .. pos.x .. "," .. pos.y .. "," .. h .. "," .. f .. "," .. a .. "," .. aid .. "," .. hp .. "|"
+        state = state .. id .. "," .. pos.x .. "," .. pos.y .. "," .. h .. "," .. f .. "," .. a .. "," .. atype .. "," .. aid .. "," .. hp .. "|"
     end
     Server.host:broadcast(state, 0, "unreliable")
 end

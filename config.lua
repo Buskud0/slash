@@ -13,9 +13,10 @@ return {
     -- Combat Constants
     SWING_DURATION = 0.12,
     STAB_DURATION = 0.15,
-    SWING_COOLDOWN = 0.25,
-    STAB_COOLDOWN = 0.30,
-    SWORD_LENGTH = 38,
+    SWING_COOLDOWN = 1.0,
+    STAB_COOLDOWN = 1.0,
+    STAB_LENGTH = 50,
+    SWING_LENGTH = 35,
     SWING_DAMAGE = 10,
     STAB_DAMAGE = 20,
     MAX_HEALTH = 100,
@@ -23,14 +24,19 @@ return {
     SPAWN_Y = 50,
 
     -- Dash Constants
-    DASH_DURATION = 0.12,
-    DASH_COOLDOWN = 0.8,
-    DASH_SPEED_MULTIPLIER = 2.5,
+    DASH_DURATION = 0.15,
+    DASH_COOLDOWN = 1,
+    DASH_SPEED_MULTIPLIER = 3,
 
     -- Physics Constants
     KNOCKBACK_FORCE = 400,
     KNOCKBACK_DECAY = 8,
     GRAVITY_HIT_REDUCTION = 0.25,
     GRAVITY_JUMP_RELEASE_MULTIPLIER = 3.0,
-    JUMP_COOLDOWN = 0.2
+    JUMP_COOLDOWN = 0.2,
+    CROUCH_FALL_MULTIPLIER = 3.0,
+
+    -- Hit Gravity Constants
+    HIT_GRAVITY_DURATION = 0.5,
+    HIT_GRAVITY_MULTIPLIER = 0.1
 }
