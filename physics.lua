@@ -299,6 +299,11 @@ function Physics.update(dt, input)
         end
     end
 
+    if Physics.hook and (input.shootBullet or input.attackStab or input.attackSlash) then
+        Physics.hook = nil
+        Physics.pull_toward = nil
+    end
+
     if input.shootBullet and Physics.bullet_cooldown == 0 and not input.attackStab and not input.attackSlash then
         local cx, cy = get_player_center()
         local dx = input.mouse_x - cx

@@ -151,13 +151,6 @@ local function check_local_player_hits()
                 local attack_id = local_player.attack_id or 0
                 if last_hit_targets[id] ~= attack_id then
                     last_hit_targets[id] = attack_id
-                    
-                    local at = local_player.attack_type or ""
-                    if at:sub(1, 4) == "stab" then
-                        Physics.clear_cooldown(at)
-                    elseif at:sub(1, 5) == "swing" then
-                        Physics.clear_cooldown(at)
-                    end
                 end
             end
         end
