@@ -107,12 +107,33 @@ local function draw_floor()
     love.graphics.line(0, config.GROUND_Y, screen_width, config.GROUND_Y)
 end
 
+local function draw_bullets(bullets)
+    if not bullets then return end
+    love.graphics.setColor(1, 1, 0)
+    for _, b in ipairs(bullets) do
+        love.graphics.rectangle("fill", b.x - config.BULLET_SIZE / 2, b.y - config.BULLET_SIZE / 2, config.BULLET_SIZE, config.BULLET_SIZE)
+    end
+end
+
+local function draw_hook(hook, x, y, h)
+    if not hook then return end
+    local cx = x + (config.SPRITE_SIZE / 2)
+    local cy = y + (h / 2)
+    love.graphics.setColor(0.8, 0.8, 0.2)
+    love.graphics.setLineWidth(1)
+    love.graphics.line(cx, cy, hook.x, hook.y)
+    love.graphics.setColor(1, 1, 1)
+    love.graphics.rectangle("fill", hook.x - config.HOOK_SIZE / 2, hook.y - config.HOOK_SIZE / 2, config.HOOK_SIZE, config.HOOK_SIZE)
+end
+
 function Renderer.draw(local_player, players, my_id)
     love.graphics.push()
     love.graphics.scale(config.ZOOM, config.ZOOM)
 
     draw_floor()
     draw_players(local_player, players, my_id)
+    draw_bullets(local_player.bullets)
+    draw_hook(local_player.hook, local_player.x, local_player.y, local_player.height)
     
     love.graphics.pop()
 end

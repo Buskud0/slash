@@ -38,5 +38,20 @@ return {
 
     -- Hit Gravity Constants
     HIT_GRAVITY_DURATION = 0.5,
-    HIT_GRAVITY_MULTIPLIER = 0.1
+    HIT_GRAVITY_MULTIPLIER = 0.1,
+
+    -- Bullet Constants
+    BULLET_SPEED = 300,
+    BULLET_DAMAGE = 15,
+    BULLET_COOLDOWN = 0.4,
+    BULLET_LIFETIME = 1.5,
+    BULLET_SIZE = 3,
+    BULLET_KNOCKBACK_FORCE = 150,
+
+    -- Hook Constants
+    HOOK_SPEED = 500,
+    HOOK_RANGE = 120,
+    HOOK_COOLDOWN = 1.0,
+    HOOK_SIZE = 3,
+    HOOK_PULL_FORCE = 400
 }

@@ -55,34 +55,30 @@ local function get_sword_tip(player)
     elseif at == "swing_up_left" then
         local progress = (config.SWING_DURATION - timer) / config.SWING_DURATION
         local sweep = math.pi - progress * (math.pi / 2)
-        local contact_angle = sweep + (math.pi / 2)
         local tip_x = center_x + math.cos(sweep) * config.SWING_LENGTH
         local tip_y = center_y + math.sin(sweep) * config.SWING_LENGTH
-        return tip_x, tip_y, contact_angle
+        return tip_x, tip_y, 3 * math.pi / 4
 
     elseif at == "swing_up_right" then
         local progress = (config.SWING_DURATION - timer) / config.SWING_DURATION
         local sweep = progress * (math.pi / 2)
-        local contact_angle = sweep + (math.pi / 2)
         local tip_x = center_x + math.cos(sweep) * config.SWING_LENGTH
         local tip_y = center_y + math.sin(sweep) * config.SWING_LENGTH
-        return tip_x, tip_y, contact_angle
+        return tip_x, tip_y, math.pi / 4
 
     elseif at == "swing_down_left" then
         local progress = (config.SWING_DURATION - timer) / config.SWING_DURATION
         local sweep = math.pi + progress * (math.pi / 2)
-        local contact_angle = sweep - (math.pi / 2)
         local tip_x = center_x + math.cos(sweep) * config.SWING_LENGTH
         local tip_y = center_y + math.sin(sweep) * config.SWING_LENGTH
-        return tip_x, tip_y, contact_angle
+        return tip_x, tip_y, -3 * math.pi / 4
 
     elseif at == "swing_down_right" then
         local progress = (config.SWING_DURATION - timer) / config.SWING_DURATION
         local sweep = -progress * (math.pi / 2)
-        local contact_angle = sweep - (math.pi / 2)
         local tip_x = center_x + math.cos(sweep) * config.SWING_LENGTH
         local tip_y = center_y + math.sin(sweep) * config.SWING_LENGTH
-        return tip_x, tip_y, contact_angle
+        return tip_x, tip_y, -math.pi / 4
 
     else
         return center_x, center_y, player.facing
@@ -168,12 +164,81 @@ local function check_local_player_hits()
     end
 end
 
+-- Checks if local player's bullets hit any guest players
+local function check_bullet_hits()
+    if not my_id then return end
+    
+    for i = #local_player.bullets, 1, -1 do
+        local b = local_player.bullets[i]
+        for id, p in pairs(network_players) do
+            if id ~= my_id then
+                local bx = p.x
+                local by = p.y
+                local bw = config.SPRITE_SIZE
+                local bh = p.height or config.PLAYER_STAND_HEIGHT
+                
+                if b.x >= bx and b.x <= bx + bw and b.y >= by and b.y <= by + bh then
+                    local kb_angle = math.atan2(b.dy, b.dx)
+                    Network.send_damage(id, config.BULLET_DAMAGE, kb_angle, config.BULLET_KNOCKBACK_FORCE)
+                    Physics.remove_bullet(i)
+                    break
+                end
+            end
+        end
+    end
+end
+
+-- Checks if local player's hook tip hits any guest players
+local function check_hook_hits(dt)
+    if not my_id or not local_player.hook then return end
+    
+    local h = local_player.hook
+    local cx = local_player.x + (config.SPRITE_SIZE / 2)
+    local cy = local_player.y + (local_player.height / 2)
+
+    if h.target_id then
+        local p = network_players[h.target_id]
+        if p then
+            local ex = p.x + (config.SPRITE_SIZE / 2)
+            local ey = p.y + (p.height or config.PLAYER_STAND_HEIGHT) / 2
+            local dist = math.sqrt((cx - ex) ^ 2 + (cy - ey) ^ 2)
+            if h.initial_dist == 0 or dist <= h.initial_dist * 0.3 then
+                Physics.hook = nil
+            else
+                Network.send_pull(h.target_id, cx, cy, h.dx, h.dy)
+            end
+        else
+            Physics.hook = nil
+        end
+        return
+    end
+
+    for id, p in pairs(network_players) do
+        if id ~= my_id then
+            local bx = p.x
+            local by = p.y
+            local bw = config.SPRITE_SIZE
+            local bh = p.height or config.PLAYER_STAND_HEIGHT
+            
+            if h.x >= bx and h.x <= bx + bw and h.y >= by and h.y <= by + bh then
+                Physics.hook.target_id = id
+                Physics.hook.x = bx + bw / 2
+                Physics.hook.y = by + bh / 2
+                local ex = bx + bw / 2
+                local ey = by + bh / 2
+                Physics.hook.initial_dist = math.sqrt((cx - ex) ^ 2 + (cy - ey) ^ 2)
+                break
+            end
+        end
+    end
+end
+
 -- Client loop processing
 local function run_client(dt)
     local input_state = {
         dx = 0, dy = 0,
         jump = false, dash = false, crouch = false,
-        attackStab = false, attackSlash = false,
+        attackStab = false, attackSlash = false, shootBullet = false, hook = false,
         mouse_x = 0, mouse_y = 0
     }
     
@@ -183,11 +248,35 @@ local function run_client(dt)
 
     local_player = Physics.update(dt, input_state)
     
-    local players, id, lost = Network.update(local_player)
+    local players, id, lost, pending_damage, pending_pull = Network.update(local_player)
     network_players, my_id = players, id
+
+    if pending_damage then
+        Physics.take_damage(pending_damage.amount)
+        if pending_damage.knockback ~= 0 then
+            Physics.apply_knockback(pending_damage.knockback, pending_damage.force)
+        end
+        Network.pending_damage = nil
+    end
+
+    if pending_pull then
+        Physics.apply_pull(pending_pull.x, pending_pull.y, pending_pull.dx, pending_pull.dy)
+        Network.pending_pull = nil
+    end
 
     check_collisions()
     check_local_player_hits()
+    check_bullet_hits()
+
+    if local_player.hook and local_player.hook.target_id then
+        local p = network_players[local_player.hook.target_id]
+        if p then
+            Physics.hook.x = p.x + (config.SPRITE_SIZE / 2)
+            Physics.hook.y = p.y + (p.height or config.PLAYER_STAND_HEIGHT) / 2
+        end
+    end
+
+    check_hook_hits(dt)
 
     if lost then
         game_state = "connecting"

@@ -13,8 +13,8 @@ local Physics = {
     facing = 1,
     attack_timer = 0,
     cooldowns = {
-        stab_left = 0, stab_right = 0, stab_up = 0, stab_down = 0,
-        swing_up_left = 0, swing_up_right = 0, swing_down_left = 0, swing_down_right = 0
+        stab = 0,
+        swing = 0
     },
     jump_cooldown = 0,
     attack_angle = 0,
@@ -22,7 +22,12 @@ local Physics = {
     knockback_x = 0,
     attack_id = 0,
     health = config.MAX_HEALTH,
-    hit_gravity_timer = 0
+    hit_gravity_timer = 0,
+    bullets = {},
+    bullet_cooldown = 0,
+    hook = nil,
+    hook_cooldown = 0,
+    pull_toward = nil
 }
 
 local function apply_gravity(dt, input)
@@ -124,16 +129,19 @@ local function update_attacks(dt, input)
             angle = angles[at]
         end
 
-        if at and Physics.cooldowns[at] == 0 then
-            Physics.attack_angle = angle
-            Physics.attack_type = at
-            Physics.attack_id = Physics.attack_id + 1
-            Physics.cooldowns[at] = at:sub(1, 4) == "stab" and config.STAB_COOLDOWN or config.SWING_COOLDOWN
+        if at then
+            local cd_key = at:sub(1, 4) == "stab" and "stab" or "swing"
+            if Physics.cooldowns[cd_key] == 0 then
+                Physics.attack_angle = angle
+                Physics.attack_type = at
+                Physics.attack_id = Physics.attack_id + 1
+                Physics.cooldowns[cd_key] = cd_key == "stab" and config.STAB_COOLDOWN or config.SWING_COOLDOWN
 
-            if at:sub(1, 4) == "stab" then
-                Physics.attack_timer = -config.STAB_DURATION
-            else
-                Physics.attack_timer = config.SWING_DURATION
+                if at:sub(1, 4) == "stab" then
+                    Physics.attack_timer = -config.STAB_DURATION
+                else
+                    Physics.attack_timer = config.SWING_DURATION
+                end
             end
         end
     end
@@ -154,6 +162,34 @@ end
 local function update_movement_and_dash(dt, input)
     Physics.dash_cooldown = math.max(0, Physics.dash_cooldown - dt)
     Physics.jump_cooldown = math.max(0, Physics.jump_cooldown - dt)
+
+    if Physics.pull_toward then
+        Physics.pull_toward.timer = Physics.pull_toward.timer - dt
+        if Physics.pull_toward.timer <= 0 then
+            Physics.knockback_x = -Physics.pull_toward.dx * config.HOOK_PULL_FORCE
+            Physics.y_velocity = -Physics.pull_toward.dy * config.HOOK_PULL_FORCE
+            Physics.is_on_ground = false
+            Physics.pull_toward = nil
+        end
+    end
+
+    if Physics.pull_toward then
+        local px = Physics.x + config.SPRITE_SIZE / 2
+        local py = Physics.y + Physics.height / 2
+        local dx = Physics.pull_toward.x - px
+        local dy = Physics.pull_toward.y - py
+        local len = math.sqrt(dx * dx + dy * dy)
+        local speed = config.HOOK_PULL_FORCE
+        if len > 1 then
+            Physics.x = Physics.x + (dx / len) * speed * dt
+            Physics.y = Physics.y + (dy / len) * speed * dt
+        end
+        Physics.y_velocity = 0
+        Physics.knockback_x = 0
+        Physics.is_on_ground = false
+        return
+    end
+
     local has_input = input.dx ~= 0 or input.dy ~= 0
 
     if Physics.dash_timer > 0 then
@@ -182,9 +218,10 @@ local function update_movement_and_dash(dt, input)
     end
 end
 
-function Physics.apply_knockback(angle)
-    Physics.knockback_x = math.cos(angle) * config.KNOCKBACK_FORCE
-    Physics.y_velocity = math.sin(angle) * config.KNOCKBACK_FORCE
+function Physics.apply_knockback(angle, force)
+    force = force or config.KNOCKBACK_FORCE
+    Physics.knockback_x = math.cos(angle) * force
+    Physics.y_velocity = math.sin(angle) * force
     Physics.is_on_ground = false
 end
 
@@ -202,12 +239,92 @@ function Physics.take_damage(amount)
 end
 
 function Physics.clear_cooldown(at)
-    Physics.cooldowns[at] = 0
+    local cd_key = at:sub(1, 4) == "stab" and "stab" or "swing"
+    Physics.cooldowns[cd_key] = 0
+end
+
+function Physics.remove_bullet(index)
+    table.remove(Physics.bullets, index)
+end
+
+function Physics.apply_pull(target_x, target_y, hook_dx, hook_dy)
+    if not Physics.pull_toward then
+        Physics.pull_toward = { x = target_x, y = target_y, timer = 0.05, dx = hook_dx, dy = hook_dy }
+    else
+        Physics.pull_toward.x = target_x
+        Physics.pull_toward.y = target_y
+        Physics.pull_toward.timer = 0.05
+    end
+end
+
+function Physics.clear_pull()
+    Physics.pull_toward = nil
 end
 
 function Physics.update(dt, input)
     update_attacks(dt, input)
     Physics.hit_gravity_timer = math.max(0, Physics.hit_gravity_timer - dt)
+    Physics.bullet_cooldown = math.max(0, Physics.bullet_cooldown - dt)
+    Physics.hook_cooldown = math.max(0, Physics.hook_cooldown - dt)
+
+    if input.hook and Physics.hook_cooldown == 0 and not Physics.hook then
+        local cx, cy = get_player_center()
+        local dx = input.mouse_x - cx
+        local dy = input.mouse_y - cy
+        local len = math.sqrt(dx * dx + dy * dy)
+        if len > 0 then
+            Physics.hook = {
+                x = cx,
+                y = cy,
+                dx = dx / len,
+                dy = dy / len,
+                traveled = 0,
+                target_id = nil
+            }
+            Physics.hook_cooldown = config.HOOK_COOLDOWN
+        end
+    end
+
+    if Physics.hook then
+        local h = Physics.hook
+        if not h.target_id then
+            local step = config.HOOK_SPEED * dt
+            h.x = h.x + h.dx * step
+            h.y = h.y + h.dy * step
+            h.traveled = h.traveled + step
+        end
+        if h.traveled >= config.HOOK_RANGE then
+            Physics.hook = nil
+            Physics.pull_toward = nil
+        end
+    end
+
+    if input.shootBullet and Physics.bullet_cooldown == 0 and not input.attackStab and not input.attackSlash then
+        local cx, cy = get_player_center()
+        local dx = input.mouse_x - cx
+        local dy = input.mouse_y - cy
+        local len = math.sqrt(dx * dx + dy * dy)
+        if len > 0 then
+            table.insert(Physics.bullets, {
+                x = cx,
+                y = cy,
+                dx = dx / len,
+                dy = dy / len,
+                timer = config.BULLET_LIFETIME
+            })
+            Physics.bullet_cooldown = config.BULLET_COOLDOWN
+        end
+    end
+
+    for i = #Physics.bullets, 1, -1 do
+        local b = Physics.bullets[i]
+        b.x = b.x + b.dx * config.BULLET_SPEED * dt
+        b.y = b.y + b.dy * config.BULLET_SPEED * dt
+        b.timer = b.timer - dt
+        if b.timer <= 0 then
+            table.remove(Physics.bullets, i)
+        end
+    end
     
     if input.dx ~= 0 and Physics.attack_timer == 0 then
         Physics.facing = input.dx > 0 and 1 or -1
@@ -231,7 +348,9 @@ function Physics.update(dt, input)
         attack_timer = active_timer,
         attack_id = Physics.attack_id,
         attack_type = Physics.attack_type,
-        health = Physics.health
+        health = Physics.health,
+        bullets = Physics.bullets,
+        hook = Physics.hook
     }
 end
 

@@ -7,7 +7,6 @@ local Server = {
     logs = {} 
 }
 
--- Private Helper: Adds server-side logs and broadcasts them as system messages to all connected clients
 local function add_log(msg)
     table.insert(Server.logs, msg)
     if #Server.logs > 5 then
@@ -18,23 +17,19 @@ local function add_log(msg)
     end
 end
 
--- Initializes the network host to listen on all interfaces at the configured port
 function Server.init()
     Server.host = enet.host_create("*:" .. config.PORT)
     add_log("hosting server on port " .. config.PORT)
 end
 
--- Private Helper: Handles new client connection
 local function on_connect(id, peer)
     peer:send("id:" .. id, 0, "reliable")
     peer:timeout(0, 1000, 3000)
     
-    -- Send recent server messages to the newly connected player
     for _, log in ipairs(Server.logs) do
         peer:send("msg:" .. log, 0, "reliable")
     end
     
-    -- Register the client with default starting positions and stats
     local start_h = tostring(config.PLAYER_STAND_HEIGHT)
     Server.clients[id] = { 
         x = config.SPAWN_X, 
@@ -51,13 +46,11 @@ local function on_connect(id, peer)
     add_log("Player Guest " .. id .. " joined")
 end
 
--- Private Helper: Handles incoming data packets from clients
 local function on_receive(id, data)
     local client = Server.clients[id]
     if not client then return end
 
     if data:sub(1, 4) == "pos:" then
-        -- Format: "pos:x,y,height,facing,attack_timer,attack_type,attack_id,health"
         local x, y, h, f, a, atype, aid, hp = data:sub(5):match("([^,]+),([^,]+),([^,]+),([^,]+),([^,]+),([^,]+),([^,]+),([^,]+)")
         if x and y and h and f and a and atype and aid and hp then
             client.x = x
@@ -70,19 +63,34 @@ local function on_receive(id, data)
             client.health = hp
         end
     elseif data:sub(1, 5) == "chat:" then
-        -- Format: "chat:message_content"
         local chat_msg = data:sub(6)
         add_log("Guest " .. id .. ": " .. chat_msg)
+    elseif data:sub(1, 7) == "damage:" then
+        local parts = data:sub(8)
+        local target_id, amount, angle, force = parts:match("([^,]+),([^,]+),([^,]+),([^,]+)")
+        if target_id and amount and angle and force then
+            local target = Server.clients[target_id]
+            if target and target.peer then
+                target.peer:send("damage:" .. amount .. "," .. angle .. "," .. force, 0, "reliable")
+            end
+        end
+    elseif data:sub(1, 5) == "pull:" then
+        local parts = data:sub(6)
+        local target_id, tx, ty, dx, dy = parts:match("([^,]+),([^,]+),([^,]+),([^,]+),([^,]+)")
+        if target_id and tx and ty and dx and dy then
+            local target = Server.clients[target_id]
+            if target and target.peer then
+                target.peer:send("pull:" .. tx .. "," .. ty .. "," .. dx .. "," .. dy, 0, "reliable")
+            end
+        end
     end
 end
 
--- Private Helper: Handles client disconnection
 local function on_disconnect(id)
     Server.clients[id] = nil
     add_log("Player Guest " .. id .. " disconnected")
 end
 
--- Private Helper: Pulls network events and dispatches them to their corresponding handlers
 local function handle_events()
     local event = Server.host:service(0)
     while event do
@@ -100,7 +108,6 @@ local function handle_events()
     end
 end
 
--- Private Helper: Broadcasts the updated coordinates and state of all clients to every client
 local function broadcast_state()
     local state = "state:"
     for id, pos in pairs(Server.clients) do
@@ -115,7 +122,6 @@ local function broadcast_state()
     Server.host:broadcast(state, 0, "unreliable")
 end
 
--- Server tick logic: pulls incoming traffic, updates client positions, and broadcasts the world state
 function Server.update(dt)
     if Server.host then
         handle_events()
@@ -123,7 +129,6 @@ function Server.update(dt)
     end
 end
 
--- Safely disconnects all clients and shuts down the server
 function Server.quit()
     if Server.host then
         for _, client in pairs(Server.clients) do
