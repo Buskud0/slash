@@ -17,6 +17,7 @@ local local_player = Player.new()
 
 -- Bot list
 local bots = {}
+local bots_enabled = false
 
 -- Network player data
 local network_players = {}
@@ -32,13 +33,6 @@ local last_hit_targets = {}
 function love.load()
     love.graphics.setDefaultFilter("nearest", "nearest")
     Network.init()
-
-    -- Spawn initial bots
-    for i = 1, config.BOT_COUNT do
-        local bx = config.SPAWN_X + 80 + (i - 1) * 40
-        local by = config.SPAWN_Y
-        bots[i] = Player.new(bx, by)
-    end
 end
 
 -- Calculates the tip coordinates of a player's sword for collision checking.
@@ -482,6 +476,19 @@ end
 
 function love.keypressed(key)
     if game_state == "client_only" or game_state == "host_and_client" then
+        if key == "p" and not Chat.is_typing then
+            bots_enabled = not bots_enabled
+            if bots_enabled then
+                for i = 1, config.BOT_COUNT do
+                    local bx = config.SPAWN_X + 80 + (i - 1) * 40
+                    local by = config.SPAWN_Y
+                    bots[i] = Player.new(bx, by)
+                end
+            else
+                bots = {}
+            end
+            return
+        end
         local msg = Chat.keypressed(key)
         if msg then
             Network.send_chat(msg)
