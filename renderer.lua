@@ -74,39 +74,6 @@ local function draw_sword_attack(x, y, h, angle, timer, attack_type)
     love.graphics.setLineWidth(1)
 end
 
-local function draw_players(local_player, players, my_id)
-    for id, p in pairs(players) do
-        local is_me = (id == my_id)
-        local px = is_me and local_player.x or p.x
-        local py = is_me and local_player.y or p.y
-        local h = is_me and local_player.height or (p.height or config.PLAYER_STAND_HEIGHT)
-        local facing = is_me and local_player.facing or (p.facing or 1)
-        local timer = is_me and local_player.attack_timer or (p.attack_timer or 0)
-        local hp = is_me and local_player.health or (p.health or config.MAX_HEALTH)
-        local at = is_me and local_player.attack_type or (p.attack_type or nil)
-
-        if is_me then
-            draw_player_box(px, py, h, 0, 1, 0)
-            draw_nickname("You", px, py, h)
-        else
-            draw_player_box(px, py, h, 1, 0, 0)
-            draw_nickname("Guest " .. id, px, py, h)
-        end
-
-        draw_health_bar(px, py - 5, hp)
-
-        if math.abs(timer) > 0 then
-            draw_sword_attack(px, py, h, facing, timer, at)
-        end
-    end
-end
-
-local function draw_floor()
-    love.graphics.setColor(1, 1, 1)
-    local screen_width = love.graphics.getWidth() / config.ZOOM
-    love.graphics.line(0, config.GROUND_Y, screen_width, config.GROUND_Y)
-end
-
 local function draw_bullets(bullets)
     if not bullets then return end
     love.graphics.setColor(1, 1, 0)
@@ -126,12 +93,64 @@ local function draw_hook(hook, x, y, h)
     love.graphics.rectangle("fill", hook.x - config.HOOK_SIZE / 2, hook.y - config.HOOK_SIZE / 2, config.HOOK_SIZE, config.HOOK_SIZE)
 end
 
-function Renderer.draw(local_player, players, my_id)
+local function draw_players(local_player, players, my_id)
+    for id, p in pairs(players) do
+        local is_me = (id == my_id)
+        local px = is_me and local_player.x or p.x
+        local py = is_me and local_player.y or p.y
+        local h = is_me and local_player.height or (p.height or config.PLAYER_STAND_HEIGHT)
+        local facing = is_me and (local_player.view_facing or local_player.facing) or (p.view_facing or p.facing or 1)
+        local timer = is_me and local_player.attack_timer or (p.attack_timer or 0)
+        local hp = is_me and local_player.health or (p.health or config.MAX_HEALTH)
+        local at = is_me and local_player.attack_type or (p.attack_type or nil)
+
+        if is_me then
+            draw_player_box(px, py, h, 0, 1, 0)
+            draw_nickname("You", px, py, h)
+        else
+            draw_player_box(px, py, h, 1, 0, 0)
+            draw_nickname("Guest " .. id, px, py, h)
+        end
+
+        draw_health_bar(px, py - 5, hp)
+
+        if math.abs(timer) > 0 then
+            draw_sword_attack(px, py, h, facing, timer, at)
+        end
+
+        draw_bullets(p.bullets)
+        draw_hook(p.hook, px, py, h)
+    end
+end
+
+local function draw_bot_players(bots)
+    for i, bot in ipairs(bots) do
+        draw_player_box(bot.x, bot.y, bot.height, 0.3, 0.5, 1)
+        draw_nickname("Bot " .. i, bot.x, bot.y, bot.height)
+        draw_health_bar(bot.x, bot.y - 5, bot.health)
+
+        if math.abs(bot.attack_timer) > 0 then
+            draw_sword_attack(bot.x, bot.y, bot.height, bot.view_facing or bot.facing, bot.attack_timer, bot.attack_type)
+        end
+
+        draw_bullets(bot.bullets)
+        draw_hook(bot.hook, bot.x, bot.y, bot.height)
+    end
+end
+
+local function draw_floor()
+    love.graphics.setColor(1, 1, 1)
+    local screen_width = love.graphics.getWidth() / config.ZOOM
+    love.graphics.line(0, config.GROUND_Y, screen_width, config.GROUND_Y)
+end
+
+function Renderer.draw(local_player, players, my_id, bots)
     love.graphics.push()
     love.graphics.scale(config.ZOOM, config.ZOOM)
 
     draw_floor()
     draw_players(local_player, players, my_id)
+    draw_bot_players(bots)
     draw_bullets(local_player.bullets)
     draw_hook(local_player.hook, local_player.x, local_player.y, local_player.height)
     

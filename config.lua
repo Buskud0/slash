@@ -18,7 +18,7 @@ return {
     STAB_LENGTH = 50,
     SWING_LENGTH = 35,
     SWING_DAMAGE = 10,
-    STAB_DAMAGE = 20,
+    STAB_DAMAGE = 15,
     MAX_HEALTH = 100,
     SPAWN_X = 40,
     SPAWN_Y = 50,
@@ -43,7 +43,7 @@ return {
     -- Bullet Constants
     BULLET_SPEED = 300,
     BULLET_DAMAGE = 15,
-    BULLET_COOLDOWN = 0.4,
+    BULLET_COOLDOWN = 1,
     BULLET_LIFETIME = 1.5,
     BULLET_SIZE = 3,
     BULLET_KNOCKBACK_FORCE = 150,
@@ -53,5 +53,9 @@ return {
     HOOK_RANGE = 120,
     HOOK_COOLDOWN = 1.0,
     HOOK_SIZE = 3,
-    HOOK_PULL_FORCE = 400
+    HOOK_PULL_FORCE = 400,
+
+    -- Bot Constants
+    BOT_COUNT = 1,
+    BOT_SPEED_MULT = 0.5
 }
