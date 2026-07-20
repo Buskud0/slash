@@ -47,7 +47,6 @@ return {
     BULLET_LIFETIME = 1.5,
     BULLET_SIZE = 3,
     BULLET_KNOCKBACK_FORCE = 150,
-    BULLET_RANGE = 70,
 
     -- Hook Constants
     HOOK_SPEED = 400,
