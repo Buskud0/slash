@@ -30,16 +30,8 @@ local function on_connect(id, peer)
         peer:send("msg:" .. log, 0, "reliable")
     end
     
-    local start_h = tostring(config.PLAYER_STAND_HEIGHT)
     Server.clients[id] = { 
-        x = config.SPAWN_X, 
-        y = config.SPAWN_Y, 
-        height = start_h, 
-        facing = "1", 
-        attacking = "0", 
-        attack_type = "none",
-        attack_id = "0",
-        health = tostring(config.MAX_HEALTH),
+        raw_pos = "",
         peer = peer 
     }
     
@@ -51,27 +43,18 @@ local function on_receive(id, data)
     if not client then return end
 
     if data:sub(1, 4) == "pos:" then
-        local x, y, h, f, a, atype, aid, hp = data:sub(5):match("([^,]+),([^,]+),([^,]+),([^,]+),([^,]+),([^,]+),([^,]+),([^,]+)")
-        if x and y and h and f and a and atype and aid and hp then
-            client.x = x
-            client.y = y
-            client.height = h
-            client.facing = f
-            client.attacking = a
-            client.attack_type = atype
-            client.attack_id = aid
-            client.health = hp
-        end
+        client.raw_pos = data:sub(5)
     elseif data:sub(1, 5) == "chat:" then
         local chat_msg = data:sub(6)
         add_log("Guest " .. id .. ": " .. chat_msg)
     elseif data:sub(1, 7) == "damage:" then
         local parts = data:sub(8)
-        local target_id, amount, angle, force = parts:match("([^,]+),([^,]+),([^,]+),([^,]+)")
+        local target_id, amount, angle, force, slow = parts:match("([^,]+),([^,]+),([^,]+),([^,]+),([^,]+)")
         if target_id and amount and angle and force then
             local target = Server.clients[target_id]
             if target and target.peer then
-                target.peer:send("damage:" .. amount .. "," .. angle .. "," .. force, 0, "reliable")
+                local s = slow or "0"
+                target.peer:send("damage:" .. amount .. "," .. angle .. "," .. force .. "," .. s, 0, "reliable")
             end
         end
     elseif data:sub(1, 5) == "pull:" then
@@ -109,17 +92,15 @@ local function handle_events()
 end
 
 local function broadcast_state()
-    local state = "state:"
-    for id, pos in pairs(Server.clients) do
-        local h = pos.height or tostring(config.PLAYER_STAND_HEIGHT)
-        local f = pos.facing or "1"
-        local a = pos.attacking or "0"
-        local atype = pos.attack_type or "none"
-        local aid = pos.attack_id or "0"
-        local hp = pos.health or tostring(config.MAX_HEALTH)
-        state = state .. id .. "," .. pos.x .. "," .. pos.y .. "," .. h .. "," .. f .. "," .. a .. "," .. atype .. "," .. aid .. "," .. hp .. "|"
+    local parts = {}
+    for id, client in pairs(Server.clients) do
+        if client.raw_pos and #client.raw_pos > 0 then
+            table.insert(parts, id .. ":" .. client.raw_pos)
+        end
     end
-    Server.host:broadcast(state, 0, "unreliable")
+    if #parts > 0 then
+        Server.host:broadcast("state:" .. table.concat(parts, "|"), 0, "unreliable")
+    end
 end
 
 function Server.update(dt)

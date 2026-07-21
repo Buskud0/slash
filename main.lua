@@ -163,10 +163,35 @@ local function check_collisions()
             local b = bot.bullets[i]
             if b.x >= bx and b.x <= bx + bw and b.y >= by and b.y <= by + bh then
                 local kb_angle = math.atan2(b.dy, b.dx)
-                Physics.apply_knockback(local_player, kb_angle, config.BULLET_KNOCKBACK_FORCE)
-                Physics.take_damage(local_player, config.BULLET_DAMAGE)
+                Physics.apply_knockback(local_player, kb_angle, config.NET_KNOCKBACK_FORCE)
+                Physics.apply_net_slow(local_player)
                 Physics.remove_bullet(bot, i)
                 break
+            end
+        end
+    end
+
+    -- Bot sword attacks hitting local player
+    for bi, bot in ipairs(bots) do
+        if bot.attack_timer and math.abs(bot.attack_timer) > 0 then
+            local attack_id = bot.attack_id or 0
+            local hit_key = "bot_" .. bi
+            if last_hit_by[hit_key] ~= attack_id then
+                local tx, ty, contact_angle = get_sword_tip(bot)
+                local cx = bot.x + (config.SPRITE_SIZE / 2)
+                local cy = bot.y + (bot.height / 2)
+
+                if check_line_collision(cx, cy, tx, ty, bx, by, bw, bh) then
+                    last_hit_by[hit_key] = attack_id
+                    Physics.apply_knockback(local_player, contact_angle)
+
+                    local at = bot.attack_type or ""
+                    local damage = config.SWING_DAMAGE
+                    if at:sub(1, 4) == "stab" then
+                        damage = config.STAB_DAMAGE
+                    end
+                    Physics.take_damage(local_player, damage)
+                end
             end
         end
     end
@@ -220,6 +245,51 @@ local function check_local_player_hits()
     end
 end
 
+local function check_hook_bullet_collide()
+    local half = config.NET_SIZE / 2
+
+    if local_player.hook then
+        local h = local_player.hook
+        for bi, bot in ipairs(bots) do
+            for i = #bot.bullets, 1, -1 do
+                local b = bot.bullets[i]
+                if math.abs(b.x - h.x) < half + config.HOOK_SIZE / 2 and math.abs(b.y - h.y) < half + config.HOOK_SIZE / 2 then
+                    Physics.remove_bullet(bot, i)
+                    local_player.hook = nil
+                    return
+                end
+            end
+        end
+
+        for id, p in pairs(network_players) do
+            if id ~= my_id and p.bullets then
+                for i = #p.bullets, 1, -1 do
+                    local b = p.bullets[i]
+                    if math.abs(b.x - h.x) < half + config.HOOK_SIZE / 2 and math.abs(b.y - h.y) < half + config.HOOK_SIZE / 2 then
+                        table.remove(p.bullets, i)
+                        local_player.hook = nil
+                        return
+                    end
+                end
+            end
+        end
+    end
+
+    for i = #local_player.bullets, 1, -1 do
+        local b = local_player.bullets[i]
+        for bi, bot in ipairs(bots) do
+            if bot.hook then
+                local hk = bot.hook
+                if math.abs(b.x - hk.x) < half + config.HOOK_SIZE / 2 and math.abs(b.y - hk.y) < half + config.HOOK_SIZE / 2 then
+                    Physics.remove_bullet(local_player, i)
+                    bot.hook = nil
+                    break
+                end
+            end
+        end
+    end
+end
+
 local function check_sword_deflects_bullets()
     if local_player.attack_timer == 0 then return end
 
@@ -230,9 +300,63 @@ local function check_sword_deflects_bullets()
     for bi, bot in ipairs(bots) do
         for i = #bot.bullets, 1, -1 do
             local b = bot.bullets[i]
-            local half = config.BULLET_SIZE / 2
-            if check_line_collision(cx, cy, tx, ty, b.x - half, b.y - half, config.BULLET_SIZE, config.BULLET_SIZE) then
+            local half = config.NET_SIZE / 2
+            if check_line_collision(cx, cy, tx, ty, b.x - half, b.y - half, config.NET_SIZE, config.NET_SIZE) then
                 Physics.remove_bullet(bot, i)
+            end
+        end
+    end
+
+    for id, p in pairs(network_players) do
+        if id ~= my_id and p.bullets then
+            for i = #p.bullets, 1, -1 do
+                local b = p.bullets[i]
+                local half = config.NET_SIZE / 2
+                if check_line_collision(cx, cy, tx, ty, b.x - half, b.y - half, config.NET_SIZE, config.NET_SIZE) then
+                    table.remove(p.bullets, i)
+                end
+            end
+        end
+    end
+end
+
+local function check_nets_collide()
+    local function nets_overlap(a, b)
+        local half = config.NET_SIZE / 2
+        return math.abs(a.x - b.x) < config.NET_SIZE and math.abs(a.y - b.y) < config.NET_SIZE
+    end
+
+    for i = #local_player.bullets, 1, -1 do
+        local b = local_player.bullets[i]
+        local removed = false
+
+        for bi, bot in ipairs(bots) do
+            for j = #bot.bullets, 1, -1 do
+                local ob = bot.bullets[j]
+                if nets_overlap(b, ob) then
+                    Physics.remove_bullet(bot, j)
+                    Physics.remove_bullet(local_player, i)
+                    removed = true
+                    break
+                end
+            end
+            if removed then break end
+        end
+
+        if not removed then
+            for id, p in pairs(network_players) do
+                if id ~= my_id and p.bullets then
+                    for j = #p.bullets, 1, -1 do
+                        local ob = p.bullets[j]
+                        if nets_overlap(b, ob) then
+                            table.remove(p.bullets, j)
+                            Physics.remove_bullet(local_player, i)
+                            removed = true
+                            break
+                        end
+                    end
+                    if removed then break end
+                end
             end
         end
     end
@@ -251,7 +375,7 @@ local function check_bullet_hits()
                 
                 if b.x >= bx and b.x <= bx + bw and b.y >= by and b.y <= by + bh then
                     local kb_angle = math.atan2(b.dy, b.dx)
-                    Network.send_damage(id, config.BULLET_DAMAGE, kb_angle, config.BULLET_KNOCKBACK_FORCE)
+                    Network.send_damage(id, 0, kb_angle, config.NET_KNOCKBACK_FORCE, config.NET_SLOW_DURATION)
                     Physics.remove_bullet(local_player, i)
                     break
                 end
@@ -270,8 +394,8 @@ local function check_bullet_hits()
 
             if b.x >= bx and b.x <= bx + bw and b.y >= by and b.y <= by + bh then
                 local kb_angle = math.atan2(b.dy, b.dx)
-                Physics.apply_knockback(bot, kb_angle, config.BULLET_KNOCKBACK_FORCE)
-                Physics.take_damage(bot, config.BULLET_DAMAGE)
+                Physics.apply_knockback(bot, kb_angle, config.NET_KNOCKBACK_FORCE)
+                Physics.apply_net_slow(bot)
                 Physics.remove_bullet(local_player, i)
                 break
             end
@@ -410,6 +534,9 @@ local function run_client(dt)
         if pending_damage.knockback ~= 0 then
             Physics.apply_knockback(local_player, pending_damage.knockback, pending_damage.force)
         end
+        if pending_damage.slow and pending_damage.slow > 0 then
+            Physics.apply_net_slow(local_player, pending_damage.slow)
+        end
         Network.pending_damage = nil
     end
 
@@ -421,6 +548,8 @@ local function run_client(dt)
     check_collisions()
     check_local_player_hits()
     check_sword_deflects_bullets()
+    check_hook_bullet_collide()
+    check_nets_collide()
     check_bullet_hits()
     update_hook_tracking()
     check_hook_hits(dt)

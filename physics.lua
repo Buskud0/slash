@@ -66,57 +66,60 @@ local function update_attacks(player, dt, input)
         player.cooldowns[name] = math.max(0, cd - dt)
     end
 
-    if player.attack_timer == 0 then
-        local at, angle
+    if player.attack_timer ~= 0 then return false end
 
-        if input.attackStab then
-            angle = angle_from_mouse(player, input)
-            if angle > -math.pi / 4 and angle <= math.pi / 4 then
-                at = "stab_right"
-            elseif angle > math.pi / 4 and angle <= 3 * math.pi / 4 then
-                at = "stab_down"
-            elseif angle > -3 * math.pi / 4 and angle <= -math.pi / 4 then
-                at = "stab_up"
-            else
-                at = "stab_left"
-            end
+    local at, angle
 
-        elseif input.attackSlash then
-            local cx, cy = get_player_center(player)
-            local mouse_above = input.mouse_y < cy
-            local mouse_left = input.mouse_x < cx
-
-            if mouse_above then
-                at = mouse_left and "swing_down_left" or "swing_down_right"
-            else
-                at = mouse_left and "swing_up_left" or "swing_up_right"
-            end
-
-            local angles = {
-                swing_down_left = 5 * math.pi / 4,
-                swing_down_right = -math.pi / 4,
-                swing_up_left = 3 * math.pi / 4,
-                swing_up_right = math.pi / 4
-            }
-            angle = angles[at]
+    if input.attackStab then
+        angle = angle_from_mouse(player, input)
+        if angle > -math.pi / 4 and angle <= math.pi / 4 then
+            at = "stab_right"
+        elseif angle > math.pi / 4 and angle <= 3 * math.pi / 4 then
+            at = "stab_down"
+        elseif angle > -3 * math.pi / 4 and angle <= -math.pi / 4 then
+            at = "stab_up"
+        else
+            at = "stab_left"
         end
 
-        if at then
-            local cd_key = at:sub(1, 4) == "stab" and "stab" or "swing"
-            if player.cooldowns[cd_key] == 0 then
-                player.attack_angle = angle
-                player.attack_type = at
-                player.attack_id = player.attack_id + 1
-                player.cooldowns[cd_key] = cd_key == "stab" and config.STAB_COOLDOWN or config.SWING_COOLDOWN
+    elseif input.attackSlash then
+        local cx, cy = get_player_center(player)
+        local mouse_above = input.mouse_y < cy
+        local mouse_left = input.mouse_x < cx
 
-                if at:sub(1, 4) == "stab" then
-                    player.attack_timer = -config.STAB_DURATION
-                else
-                    player.attack_timer = config.SWING_DURATION
-                end
+        if mouse_above then
+            at = mouse_left and "swing_down_left" or "swing_down_right"
+        else
+            at = mouse_left and "swing_up_left" or "swing_up_right"
+        end
+
+        local angles = {
+            swing_down_left = 5 * math.pi / 4,
+            swing_down_right = -math.pi / 4,
+            swing_up_left = 3 * math.pi / 4,
+            swing_up_right = math.pi / 4
+        }
+        angle = angles[at]
+    end
+
+    if at then
+        local cd_key = at:sub(1, 4) == "stab" and "stab" or "swing"
+        if player.cooldowns[cd_key] == 0 then
+            player.attack_angle = angle
+            player.attack_type = at
+            player.attack_id = player.attack_id + 1
+            player.cooldowns[cd_key] = cd_key == "stab" and config.STAB_COOLDOWN or config.SWING_COOLDOWN
+
+            if at:sub(1, 4) == "stab" then
+                player.attack_timer = -config.STAB_DURATION
+            else
+                player.attack_timer = config.SWING_DURATION
             end
+            return true
         end
     end
+
+    return false
 end
 
 local function update_attack_timers(player, dt)
@@ -171,7 +174,20 @@ local function update_movement_and_dash(player, dt, input)
         player.y = player.y + player.dash_dy * config.SPEED * config.DASH_SPEED_MULTIPLIER * dt
     else
         player.knockback_x = player.knockback_x - player.knockback_x * config.KNOCKBACK_DECAY * dt
-        player.x = player.x + (input.dx * config.SPEED + player.knockback_x) * dt
+
+        if input.dx ~= 0 then
+            local speed = config.SPEED
+            if player.slow_timer > 0 then
+                speed = speed * config.NET_SLOW_MULTIPLIER
+            end
+            player.air_velocity_x = input.dx * speed
+        elseif not player.is_on_ground then
+            player.air_velocity_x = player.air_velocity_x - player.air_velocity_x * config.AIR_FRICTION * dt
+        else
+            player.air_velocity_x = 0
+        end
+
+        player.x = player.x + (player.air_velocity_x + player.knockback_x) * dt
         
         if input.dash and player.dash_cooldown == 0 and has_input then
             local len = math.sqrt(input.dx * input.dx + input.dy * input.dy)
@@ -235,10 +251,28 @@ function Physics.clear_pull(player)
     player.pull_toward = nil
 end
 
+function Physics.apply_net_slow(player, duration)
+    local dur = duration or config.NET_SLOW_DURATION
+    player.slow_timer = math.max(player.slow_timer, dur)
+end
+
 function Physics.update(player, dt, input)
     player.hit_gravity_timer = math.max(0, player.hit_gravity_timer - dt)
     player.bullet_cooldown = math.max(0, player.bullet_cooldown - dt)
     player.hook_cooldown = math.max(0, player.hook_cooldown - dt)
+    player.slow_timer = math.max(0, player.slow_timer - dt)
+
+    if player.slow_timer > 0 then
+        local active_timer = update_attack_timers(player, dt)
+        player.view_facing = active_timer ~= 0 and player.attack_angle or player.facing
+
+        player.knockback_x = player.knockback_x - player.knockback_x * config.KNOCKBACK_DECAY * dt
+        player.x = player.x + player.knockback_x * dt
+
+        apply_gravity(player, dt, input)
+        enforce_boundaries(player)
+        return player
+    end
 
     if player.pull_toward then
         update_movement_and_dash(player, dt, input)
@@ -246,8 +280,9 @@ function Physics.update(player, dt, input)
         return player
     end
 
-    update_attacks(player, dt, input)
+    local attack_started = update_attacks(player, dt, input)
 
+    local hook_activated = false
     if input.hook and player.hook_cooldown == 0 and not player.hook then
         local cx, cy = get_player_center(player)
         local dx = input.mouse_x - cx
@@ -263,6 +298,7 @@ function Physics.update(player, dt, input)
                 target_id = nil
             }
             player.hook_cooldown = config.HOOK_COOLDOWN
+            hook_activated = true
         end
     end
 
@@ -280,11 +316,7 @@ function Physics.update(player, dt, input)
         end
     end
 
-    if player.hook and (input.shootBullet or input.attackStab or input.attackSlash) then
-        player.hook = nil
-        player.pull_toward = nil
-    end
-
+    local bullet_fired = false
     if input.shootBullet and player.bullet_cooldown == 0 and not input.attackStab and not input.attackSlash then
         local cx, cy = get_player_center(player)
         local dx = input.mouse_x - cx
@@ -296,16 +328,32 @@ function Physics.update(player, dt, input)
                 y = cy,
                 dx = dx / len,
                 dy = dy / len,
-                timer = config.BULLET_LIFETIME
+                timer = config.NET_LIFETIME
             })
-            player.bullet_cooldown = config.BULLET_COOLDOWN
+            player.bullet_cooldown = config.NET_COOLDOWN
+            bullet_fired = true
         end
+    end
+
+    if hook_activated and attack_started then
+        player.attack_timer = 0
+        player.attack_type = nil
+    end
+
+    if bullet_fired and player.hook then
+        player.hook = nil
+        player.pull_toward = nil
+    end
+
+    if attack_started and player.hook then
+        player.hook = nil
+        player.pull_toward = nil
     end
 
     for i = #player.bullets, 1, -1 do
         local b = player.bullets[i]
-        b.x = b.x + b.dx * config.BULLET_SPEED * dt
-        b.y = b.y + b.dy * config.BULLET_SPEED * dt
+        b.x = b.x + b.dx * config.NET_SPEED * dt
+        b.y = b.y + b.dy * config.NET_SPEED * dt
         b.timer = b.timer - dt
         if b.timer <= 0 then
             table.remove(player.bullets, i)

@@ -25,9 +25,11 @@ function Player.new(spawn_x, spawn_y)
     self.attack_angle = 0
     self.attack_type = nil
     self.knockback_x = 0
+    self.air_velocity_x = 0
     self.attack_id = 0
     self.health = config.MAX_HEALTH
     self.hit_gravity_timer = 0
+    self.slow_timer = 0
     self.bullets = {}
     self.bullet_cooldown = 0
     self.hook = nil
@@ -46,6 +48,7 @@ function Player.to_view(self)
         attack_id = self.attack_id,
         attack_type = self.attack_type,
         health = self.health,
+        slow_timer = self.slow_timer or 0,
         bullets = self.bullets,
         hook = self.hook
     }

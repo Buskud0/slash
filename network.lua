@@ -23,10 +23,11 @@ function Network.send_chat(text)
     end
 end
 
-function Network.send_damage(target_id, amount, angle, force)
+function Network.send_damage(target_id, amount, angle, force, slow)
     if Network.server then
-        local payload = string.format("damage:%s,%.2f,%.4f,%.2f",
-            target_id, amount, angle, force)
+        local s = slow or 0
+        local payload = string.format("damage:%s,%.2f,%.4f,%.2f,%.2f",
+            target_id, amount, angle, force, s)
         Network.server:send(payload, 0, "reliable")
     end
 end
@@ -42,18 +43,55 @@ end
 local function parse_state(payload)
     local active = {}
     for player_data in string.gmatch(payload, "([^|]+)") do
-        local id, px, py, ph, pf, pa, pat, paid, phealth = player_data:match("([^,]+),([^,]+),([^,]+),([^,]+),([^,]+),([^,]+),([^,]+),([^,]+),([^,]+)")
-        if id and px and py and ph and pf and pa and pat and paid and phealth then
-            active[id] = { 
-                x = tonumber(px), 
-                y = tonumber(py), 
-                height = tonumber(ph), 
-                facing = tonumber(pf) / 100, 
-                attack_timer = tonumber(pa) / 100,
-                attack_type = pat ~= "none" and pat or nil,
-                attack_id = tonumber(paid) or 0,
-                health = tonumber(phealth) or config.MAX_HEALTH
-            }
+        local id_end = player_data:find(":")
+        if id_end then
+            local id = player_data:sub(1, id_end - 1)
+            local raw = player_data:sub(id_end + 1)
+
+            local px, py, ph, pf, pa, pat, paid, phealth, pslow = raw:match(
+                "([^,]+),([^,]+),([^,]+),([^,]+),([^,]+),([^,]+),([^,]+),([^,]+),([^,]+)")
+            if px and py and ph and pf and pa and pat and paid and phealth then
+                local view = {
+                    x = tonumber(px),
+                    y = tonumber(py),
+                    height = tonumber(ph),
+                    facing = tonumber(pf) / 100,
+                    attack_timer = tonumber(pa) / 100,
+                    attack_type = pat ~= "none" and pat or nil,
+                    attack_id = tonumber(paid) or 0,
+                    health = tonumber(phealth) or config.MAX_HEALTH,
+                    slow_timer = tonumber(pslow) or 0,
+                    bullets = {},
+                    hook = nil
+                }
+
+                local bullets_str = raw:match(",b:(.-),k:")
+                if not bullets_str then
+                    bullets_str = raw:match(",b:([^|]*)")
+                end
+                if bullets_str and #bullets_str > 0 then
+                    local idx = 1
+                    for bx, by in bullets_str:gmatch("([^,]+),([^,]+)") do
+                        view.bullets[idx] = { x = tonumber(bx), y = tonumber(by) }
+                        idx = idx + 1
+                    end
+                end
+
+                local hook_str = raw:match(",k:([^|]*)")
+                if hook_str and #hook_str > 0 then
+                    local hx, hy, hdx, hdy = hook_str:match("([^,]+),([^,]+),([^,]+),([^,]+)")
+                    if hx and hy then
+                        view.hook = {
+                            x = tonumber(hx),
+                            y = tonumber(hy),
+                            dx = tonumber(hdx) or 0,
+                            dy = tonumber(hdy) or 0
+                        }
+                    end
+                end
+
+                active[id] = view
+            end
         end
     end
     Network.players = active
@@ -67,17 +105,38 @@ function Network.update(local_player)
         local facing = math.floor(local_player.facing * 100)
         local attack_timer = math.floor(local_player.attack_timer * 100)
         local attack_type = local_player.attack_type or "none"
-        
-        local payload = string.format("pos:%d,%d,%d,%d,%d,%s,%d,%d", 
-            math.floor(local_player.x), 
-            math.floor(local_player.y), 
-            height, 
-            facing, 
+        local slow = math.floor((local_player.slow_timer or 0) * 100)
+
+        local payload = string.format("pos:%d,%d,%d,%d,%d,%s,%d,%d,%d",
+            math.floor(local_player.x),
+            math.floor(local_player.y),
+            height,
+            facing,
             attack_timer,
             attack_type,
             local_player.attack_id or 0,
-            local_player.health or config.MAX_HEALTH
+            local_player.health or config.MAX_HEALTH,
+            slow
         )
+
+        local bullets = local_player.bullets or {}
+        if #bullets > 0 then
+            payload = payload .. ",b:"
+            for i, b in ipairs(bullets) do
+                if i > 1 then payload = payload .. "," end
+                payload = payload .. math.floor(b.x) .. "," .. math.floor(b.y)
+            end
+        else
+            payload = payload .. ",b:"
+        end
+
+        local hook = local_player.hook
+        if hook then
+            payload = payload .. ",k:" .. math.floor(hook.x) .. "," .. math.floor(hook.y) .. "," .. string.format("%.2f", hook.dx) .. "," .. string.format("%.2f", hook.dy)
+        else
+            payload = payload .. ",k:"
+        end
+
         Network.server:send(payload, 0, "unreliable")
     end
 
@@ -94,12 +153,13 @@ function Network.update(local_player)
                     Chat.add(data:sub(5))
                 elseif data:sub(1, 7) == "damage:" then
                     local parts = data:sub(8)
-                    local amount, angle, force = parts:match("([^,]+),([^,]+),([^,]+)")
+                    local amount, angle, force, slow = parts:match("([^,]+),([^,]+),([^,]+),([^,]+)")
                     if amount and angle and force then
                         Network.pending_damage = {
                             amount = tonumber(amount),
                             knockback = tonumber(angle),
-                            force = tonumber(force)
+                            force = tonumber(force),
+                            slow = tonumber(slow) or 0
                         }
                     end
                 elseif data:sub(1, 5) == "pull:" then

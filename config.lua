@@ -31,6 +31,7 @@ return {
     -- Physics Constants
     KNOCKBACK_FORCE = 400,
     KNOCKBACK_DECAY = 8,
+    AIR_FRICTION = 6,
     GRAVITY_HIT_REDUCTION = 0.25,
     GRAVITY_JUMP_RELEASE_MULTIPLIER = 3.0,
     JUMP_COOLDOWN = 0.2,
@@ -40,13 +41,14 @@ return {
     HIT_GRAVITY_DURATION = 0.5,
     HIT_GRAVITY_MULTIPLIER = 0.1,
 
-    -- Bullet Constants
-    BULLET_SPEED = 300,
-    BULLET_DAMAGE = 15,
-    BULLET_COOLDOWN = 1,
-    BULLET_LIFETIME = 1.5,
-    BULLET_SIZE = 3,
-    BULLET_KNOCKBACK_FORCE = 150,
+    -- Net Constants
+    NET_SPEED = 300,
+    NET_COOLDOWN = 3,
+    NET_LIFETIME = 1.5,
+    NET_SIZE = 5,
+    NET_KNOCKBACK_FORCE = 200,
+    NET_SLOW_DURATION = 0.5,
+    NET_SLOW_MULTIPLIER = 0.2,
 
     -- Hook Constants
     HOOK_SPEED = 400,

@@ -76,9 +76,9 @@ end
 
 local function draw_bullets(bullets)
     if not bullets then return end
-    love.graphics.setColor(1, 1, 0)
+    love.graphics.setColor(0, 0.8, 0.9)
     for _, b in ipairs(bullets) do
-        love.graphics.rectangle("fill", b.x - config.BULLET_SIZE / 2, b.y - config.BULLET_SIZE / 2, config.BULLET_SIZE, config.BULLET_SIZE)
+        love.graphics.rectangle("fill", b.x - config.NET_SIZE / 2, b.y - config.NET_SIZE / 2, config.NET_SIZE, config.NET_SIZE)
     end
 end
 
@@ -118,8 +118,16 @@ local function draw_players(local_player, players, my_id)
             draw_sword_attack(px, py, h, facing, timer, at)
         end
 
-        draw_bullets(p.bullets)
-        draw_hook(p.hook, px, py, h)
+        local slow = is_me and local_player.slow_timer or (p.slow_timer or 0)
+        if slow > 0 then
+            love.graphics.setColor(0, 0.5, 1, 0.3)
+            love.graphics.rectangle("fill", px - 1, py - 1, config.SPRITE_SIZE + 2, h + 2)
+        end
+
+        if not is_me then
+            draw_bullets(p.bullets)
+            draw_hook(p.hook, px, py, h)
+        end
     end
 end
 
@@ -131,6 +139,11 @@ local function draw_bot_players(bots)
 
         if math.abs(bot.attack_timer) > 0 then
             draw_sword_attack(bot.x, bot.y, bot.height, bot.view_facing or bot.facing, bot.attack_timer, bot.attack_type)
+        end
+
+        if bot.slow_timer and bot.slow_timer > 0 then
+            love.graphics.setColor(0, 0.5, 1, 0.3)
+            love.graphics.rectangle("fill", bot.x - 1, bot.y - 1, config.SPRITE_SIZE + 2, bot.height + 2)
         end
 
         draw_bullets(bot.bullets)
