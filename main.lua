@@ -162,7 +162,12 @@ local function check_collisions()
         for i = #bot.bullets, 1, -1 do
             local b = bot.bullets[i]
             if b.x >= bx and b.x <= bx + bw and b.y >= by and b.y <= by + bh then
-                local kb_angle = math.atan2(b.dy, b.dx)
+                local kb_angle
+                if b.dx and b.dy then
+                    kb_angle = math.atan2(b.dy, b.dx)
+                else
+                    kb_angle = math.atan2(b.y - (by + bh / 2), b.x - (bx + bw / 2))
+                end
                 Physics.apply_knockback(local_player, kb_angle, config.NET_KNOCKBACK_FORCE)
                 Physics.apply_net_slow(local_player)
                 Physics.remove_bullet(bot, i)
@@ -394,8 +399,11 @@ local function check_bullet_hits()
 
             if b.x >= bx and b.x <= bx + bw and b.y >= by and b.y <= by + bh then
                 local kb_angle = math.atan2(b.dy, b.dx)
-                Physics.apply_knockback(bot, kb_angle, config.NET_KNOCKBACK_FORCE)
-                Physics.apply_net_slow(bot)
+                Network.send_damage("bot_" .. bi, 0, kb_angle, config.NET_KNOCKBACK_FORCE, config.NET_SLOW_DURATION)
+                if is_host then
+                    Physics.apply_knockback(bot, kb_angle, config.NET_KNOCKBACK_FORCE)
+                    Physics.apply_net_slow(bot)
+                end
                 Physics.remove_bullet(local_player, i)
                 break
             end
@@ -425,8 +433,6 @@ local function check_hook_hits(dt)
             local dist = math.sqrt((cx - ex) ^ 2 + (cy - ey) ^ 2)
             if h.initial_dist == 0 or dist <= h.initial_dist * 0.3 then
                 local_player.hook = nil
-            elseif is_bot then
-                Physics.apply_pull(p, cx, cy, h.dx, h.dy)
             else
                 Network.send_pull(h.target_id, cx, cy, h.dx, h.dy)
             end
@@ -495,6 +501,79 @@ local function update_hook_tracking()
     end
 end
 
+local function encode_bots(bot_list)
+    local parts = {}
+    for _, b in ipairs(bot_list) do
+        local s = string.format("%d,%d,%d,%d,%d,%s,%d,%d,%d",
+            math.floor(b.x), math.floor(b.y),
+            math.floor(b.height),
+            math.floor((b.view_facing or b.facing) * 100),
+            math.floor(b.attack_timer * 100),
+            b.attack_type or "none",
+            b.attack_id or 0,
+            b.health or config.MAX_HEALTH,
+            math.floor((b.slow_timer or 0) * 100))
+        if #b.bullets > 0 then
+            s = s .. ",b:"
+            for i, bul in ipairs(b.bullets) do
+                if i > 1 then s = s .. "," end
+                s = s .. math.floor(bul.x) .. "," .. math.floor(bul.y)
+            end
+        else
+            s = s .. ",b:"
+        end
+        if b.hook then
+            s = s .. ",k:" .. math.floor(b.hook.x) .. "," .. math.floor(b.hook.y)
+                .. "," .. string.format("%.2f", b.hook.dx) .. "," .. string.format("%.2f", b.hook.dy)
+        else
+            s = s .. ",k:"
+        end
+        table.insert(parts, s)
+    end
+    return table.concat(parts, "|")
+end
+
+local function decode_bots(data)
+    local result = {}
+    if not data or #data == 0 then return result end
+    for bd in data:gmatch("([^|]+)") do
+        local x, y, h, f, a, at, aid, hp, pslow = bd:match(
+            "([^,]+),([^,]+),([^,]+),([^,]+),([^,]+),([^,]+),([^,]+),([^,]+),([^,]+)")
+        if x then
+            local bot = {
+                x = tonumber(x), y = tonumber(y),
+                height = tonumber(h),
+                facing = tonumber(f) / 100,
+                attack_timer = tonumber(a) / 100,
+                attack_type = at ~= "none" and at or nil,
+                attack_id = tonumber(aid) or 0,
+                health = tonumber(hp) or config.MAX_HEALTH,
+                slow_timer = tonumber(pslow) or 0,
+                bullets = {}, hook = nil
+            }
+            local bs = bd:match(",b:(.-),k:")
+            if not bs then bs = bd:match(",b:([^|]*)") end
+            if bs and #bs > 0 then
+                local idx = 1
+                for bx, by in bs:gmatch("([^,]+),([^,]+)") do
+                    bot.bullets[idx] = { x = tonumber(bx), y = tonumber(by) }
+                    idx = idx + 1
+                end
+            end
+            local hs = bd:match(",k:([^|]*)")
+            if hs and #hs > 0 then
+                local hx, hy, hdx, hdy = hs:match("([^,]+),([^,]+),([^,]+),([^,]+)")
+                if hx and hy then
+                    bot.hook = { x = tonumber(hx), y = tonumber(hy),
+                        dx = tonumber(hdx) or 0, dy = tonumber(hdy) or 0 }
+                end
+            end
+            table.insert(result, bot)
+        end
+    end
+    return result
+end
+
 -- Client loop processing
 local function run_client(dt)
     local input_state = {
@@ -510,38 +589,79 @@ local function run_client(dt)
 
     Physics.update(local_player, dt, input_state)
 
-    -- Update bots
-    local enemies = {}
-    if my_id then
-        table.insert(enemies, local_player)
-    end
-    for id, p in pairs(network_players) do
-        if id ~= my_id then
-            table.insert(enemies, p)
-        end
-    end
-
-    for i, bot in ipairs(bots) do
-        local bot_input = Bot.get_input(bot, enemies)
-        Physics.update(bot, dt, bot_input)
-    end
-
-    local players, id, lost, pending_damage, pending_pull = Network.update(Player.to_view(local_player))
+    local players, id, lost, pending_damage, pending_pull, pending_bots, pending_toggle = Network.update(Player.to_view(local_player))
     network_players, my_id = players, id
 
-    if pending_damage then
-        Physics.take_damage(local_player, pending_damage.amount)
-        if pending_damage.knockback ~= 0 then
-            Physics.apply_knockback(local_player, pending_damage.knockback, pending_damage.force)
+    local is_host = (game_state == "host_and_client")
+
+    if pending_toggle then
+        Network.pending_toggle = false
+        if is_host then
+            bots_enabled = not bots_enabled
+            if bots_enabled then
+                for i = 1, config.BOT_COUNT do
+                    local bx = config.SPAWN_X + 80 + (i - 1) * 40
+                    local by = config.SPAWN_Y
+                    bots[i] = Player.new(bx, by)
+                end
+            else
+                bots = {}
+            end
         end
-        if pending_damage.slow and pending_damage.slow > 0 then
-            Physics.apply_net_slow(local_player, pending_damage.slow)
+    end
+
+    if is_host then
+        local enemies = {}
+        table.insert(enemies, local_player)
+        for oid, p in pairs(network_players) do
+            if oid ~= my_id then
+                table.insert(enemies, p)
+            end
+        end
+        for i, bot in ipairs(bots) do
+            local bot_input = Bot.get_input(bot, enemies)
+            Physics.update(bot, dt, bot_input)
+        end
+        Network.send_bots(encode_bots(bots))
+    else
+        if pending_bots ~= nil then
+            bots = decode_bots(pending_bots)
+            Network.pending_bots = nil
+        end
+    end
+
+    if pending_damage then
+        if pending_damage.target_id and pending_damage.target_id:sub(1, 4) == "bot_" then
+            if is_host then
+                local bi = tonumber(pending_damage.target_id:sub(5))
+                local bot = bots[bi]
+                if bot then
+                    Physics.apply_knockback(bot, pending_damage.knockback, pending_damage.force)
+                    Physics.apply_net_slow(bot, pending_damage.slow)
+                end
+            end
+        else
+            Physics.take_damage(local_player, pending_damage.amount)
+            if pending_damage.knockback ~= 0 then
+                Physics.apply_knockback(local_player, pending_damage.knockback, pending_damage.force)
+            end
+            if pending_damage.slow and pending_damage.slow > 0 then
+                Physics.apply_net_slow(local_player, pending_damage.slow)
+            end
         end
         Network.pending_damage = nil
     end
 
     if pending_pull then
-        Physics.apply_pull(local_player, pending_pull.x, pending_pull.y, pending_pull.dx, pending_pull.dy)
+        if pending_pull.target_id and pending_pull.target_id:sub(1, 4) == "bot_" then
+            local bi = tonumber(pending_pull.target_id:sub(5))
+            local bot = bots[bi]
+            if bot and is_host then
+                Physics.apply_pull(bot, pending_pull.x, pending_pull.y, pending_pull.dx, pending_pull.dy)
+            end
+        else
+            Physics.apply_pull(local_player, pending_pull.x, pending_pull.y, pending_pull.dx, pending_pull.dy)
+        end
         Network.pending_pull = nil
     end
 
@@ -558,6 +678,8 @@ local function run_client(dt)
         game_state = "connecting"
         connection_retry_timer = 0.2
         network_players, my_id = {}, nil
+        bots = {}
+        bots_enabled = false
         last_hit_by = {}
         last_hit_targets = {}
         Chat.add("Connection lost! Reconnecting...")
@@ -605,17 +727,8 @@ end
 
 function love.keypressed(key)
     if game_state == "client_only" or game_state == "host_and_client" then
-        if key == "p" and not Chat.is_typing then
-            bots_enabled = not bots_enabled
-            if bots_enabled then
-                for i = 1, config.BOT_COUNT do
-                    local bx = config.SPAWN_X + 80 + (i - 1) * 40
-                    local by = config.SPAWN_Y
-                    bots[i] = Player.new(bx, by)
-                end
-            else
-                bots = {}
-            end
+        if key == "p" and not Chat.is_typing and (game_state == "host_and_client" or game_state == "client_only") then
+            Network.send_toggle_bots()
             return
         end
         local msg = Chat.keypressed(key)

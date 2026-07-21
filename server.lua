@@ -4,7 +4,8 @@ local config = require "config"
 local Server = { 
     host = nil, 
     clients = {}, 
-    logs = {} 
+    logs = {},
+    bot_data = ""
 }
 
 local function add_log(msg)
@@ -44,6 +45,10 @@ local function on_receive(id, data)
 
     if data:sub(1, 4) == "pos:" then
         client.raw_pos = data:sub(5)
+    elseif data:sub(1, 5) == "bots:" then
+        Server.bot_data = data:sub(6)
+    elseif data:sub(1, 12) == "toggle_bots:" then
+        Server.host:broadcast("toggle_bots:", 0, "reliable")
     elseif data:sub(1, 5) == "chat:" then
         local chat_msg = data:sub(6)
         add_log("Guest " .. id .. ": " .. chat_msg)
@@ -51,19 +56,27 @@ local function on_receive(id, data)
         local parts = data:sub(8)
         local target_id, amount, angle, force, slow = parts:match("([^,]+),([^,]+),([^,]+),([^,]+),([^,]+)")
         if target_id and amount and angle and force then
-            local target = Server.clients[target_id]
-            if target and target.peer then
-                local s = slow or "0"
-                target.peer:send("damage:" .. amount .. "," .. angle .. "," .. force .. "," .. s, 0, "reliable")
+            if target_id:sub(1, 4) == "bot_" then
+                Server.host:broadcast("damage:" .. target_id .. "," .. amount .. "," .. angle .. "," .. force .. "," .. (slow or "0"), 0, "reliable")
+            else
+                local target = Server.clients[target_id]
+                if target and target.peer then
+                    local s = slow or "0"
+                    target.peer:send("damage:" .. amount .. "," .. angle .. "," .. force .. "," .. s, 0, "reliable")
+                end
             end
         end
     elseif data:sub(1, 5) == "pull:" then
         local parts = data:sub(6)
         local target_id, tx, ty, dx, dy = parts:match("([^,]+),([^,]+),([^,]+),([^,]+),([^,]+)")
         if target_id and tx and ty and dx and dy then
-            local target = Server.clients[target_id]
-            if target and target.peer then
-                target.peer:send("pull:" .. tx .. "," .. ty .. "," .. dx .. "," .. dy, 0, "reliable")
+            if target_id:sub(1, 4) == "bot_" then
+                Server.host:broadcast("pull:" .. target_id .. "," .. tx .. "," .. ty .. "," .. dx .. "," .. dy, 0, "reliable")
+            else
+                local target = Server.clients[target_id]
+                if target and target.peer then
+                    target.peer:send("pull:" .. tx .. "," .. ty .. "," .. dx .. "," .. dy, 0, "reliable")
+                end
             end
         end
     end
@@ -101,6 +114,7 @@ local function broadcast_state()
     if #parts > 0 then
         Server.host:broadcast("state:" .. table.concat(parts, "|"), 0, "unreliable")
     end
+    Server.host:broadcast("bots:" .. Server.bot_data, 0, "unreliable")
 end
 
 function Server.update(dt)

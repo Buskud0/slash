@@ -9,7 +9,7 @@ local function apply_gravity(player, dt, input)
         gravity_multiplier = gravity_multiplier * config.GRAVITY_HIT_REDUCTION
     end
     
-    if player.hit_gravity_timer > 0 then
+    if player.hit_gravity_timer > 0 and math.abs(player.knockback_x) > 50 then
         gravity_multiplier = gravity_multiplier * config.HIT_GRAVITY_MULTIPLIER
     end
     
@@ -257,10 +257,10 @@ function Physics.apply_net_slow(player, duration)
 end
 
 function Physics.update(player, dt, input)
-    player.hit_gravity_timer = math.max(0, player.hit_gravity_timer - dt)
-    player.bullet_cooldown = math.max(0, player.bullet_cooldown - dt)
-    player.hook_cooldown = math.max(0, player.hook_cooldown - dt)
-    player.slow_timer = math.max(0, player.slow_timer - dt)
+    player.hit_gravity_timer = math.max(0, (player.hit_gravity_timer or 0) - dt)
+    player.bullet_cooldown = math.max(0, (player.bullet_cooldown or 0) - dt)
+    player.hook_cooldown = math.max(0, (player.hook_cooldown or 0) - dt)
+    player.slow_timer = math.max(0, (player.slow_timer or 0) - dt)
 
     if player.slow_timer > 0 then
         local active_timer = update_attack_timers(player, dt)
@@ -268,6 +268,30 @@ function Physics.update(player, dt, input)
 
         player.knockback_x = player.knockback_x - player.knockback_x * config.KNOCKBACK_DECAY * dt
         player.x = player.x + player.knockback_x * dt
+
+        if player.hook then
+            local h = player.hook
+            if not h.target_id then
+                local step = config.HOOK_SPEED * dt
+                h.x = h.x + h.dx * step
+                h.y = h.y + h.dy * step
+                h.traveled = h.traveled + step
+            end
+            if h.traveled >= config.HOOK_RANGE then
+                player.hook = nil
+                player.pull_toward = nil
+            end
+        end
+
+        for i = #player.bullets, 1, -1 do
+            local b = player.bullets[i]
+            b.x = b.x + b.dx * config.NET_SPEED * dt
+            b.y = b.y + b.dy * config.NET_SPEED * dt
+            b.timer = b.timer - dt
+            if b.timer <= 0 then
+                table.remove(player.bullets, i)
+            end
+        end
 
         apply_gravity(player, dt, input)
         enforce_boundaries(player)

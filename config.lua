@@ -53,7 +53,7 @@ return {
     -- Hook Constants
     HOOK_SPEED = 400,
     HOOK_RANGE = 120,
-    HOOK_COOLDOWN = 1.0,
+    HOOK_COOLDOWN = 3,
     HOOK_SIZE = 3,
     HOOK_PULL_FORCE = 400,
 
