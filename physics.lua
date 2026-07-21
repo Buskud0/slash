@@ -108,7 +108,7 @@ local function update_attacks(player, dt, input)
             player.attack_angle = angle
             player.attack_type = at
             player.attack_id = player.attack_id + 1
-            player.cooldowns[cd_key] = cd_key == "stab" and config.STAB_COOLDOWN or config.SWING_COOLDOWN
+            player.attack_landed = false
 
             if at:sub(1, 4) == "stab" then
                 player.attack_timer = -config.STAB_DURATION
@@ -124,13 +124,21 @@ end
 
 local function update_attack_timers(player, dt)
     local active_timer = player.attack_timer
-    
+
     if player.attack_timer > 0 then
         player.attack_timer = math.max(0, player.attack_timer - dt)
+        if active_timer > 0 and player.attack_timer == 0 then
+            local cd_key = player.attack_type and player.attack_type:sub(1, 4) == "stab" and "stab" or "swing"
+            player.cooldowns[cd_key] = player.attack_landed and config.SWORD_COOLDOWN_HIT or config.SWORD_COOLDOWN_MISS
+        end
     elseif player.attack_timer < 0 then
         player.attack_timer = math.min(0, player.attack_timer + dt)
+        if active_timer < 0 and player.attack_timer == 0 then
+            local cd_key = player.attack_type and player.attack_type:sub(1, 4) == "stab" and "stab" or "swing"
+            player.cooldowns[cd_key] = player.attack_landed and config.SWORD_COOLDOWN_HIT or config.SWORD_COOLDOWN_MISS
+        end
     end
-    
+
     return active_timer
 end
 
@@ -208,10 +216,13 @@ local function update_movement_and_dash(player, dt, input)
     end
 end
 
-function Physics.apply_knockback(player, angle, force)
+function Physics.apply_knockback(player, angle, force, attacker_vx, attack_type)
     force = force or config.KNOCKBACK_FORCE
-    player.knockback_x = math.cos(angle) * force
+    player.knockback_x = math.cos(angle) * force + (attacker_vx or 0) * config.KNOCKBACK_VELOCITY_MULTIPLIER
     player.y_velocity = math.sin(angle) * force
+    if attack_type and (attack_type == "swing_up_left" or attack_type == "swing_up_right") then
+        player.y_velocity = player.y_velocity - config.SWING_LIFT_FORCE
+    end
     player.is_on_ground = false
 end
 

@@ -44,7 +44,7 @@ function Input.get_state()
 
         attackStab = love.mouse.isDown(1),
         attackSlash = love.mouse.isDown(2),
-        shootBullet = love.mouse.isDown(3),
+        shootBullet = love.keyboard.isDown("q"),
         hook = love.keyboard.isDown("e"),
         mouse_x = world_mouse_x,
         mouse_y = world_mouse_y

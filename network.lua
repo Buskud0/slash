@@ -25,11 +25,13 @@ function Network.send_chat(text)
     end
 end
 
-function Network.send_damage(target_id, amount, angle, force, slow)
+function Network.send_damage(target_id, amount, angle, force, slow, attacker_vx, attack_type)
     if Network.server then
         local s = slow or 0
-        local payload = string.format("damage:%s,%.2f,%.4f,%.2f,%.2f",
-            target_id, amount, angle, force, s)
+        local avx = attacker_vx or 0
+        local at = attack_type or ""
+        local payload = string.format("damage:%s,%.2f,%.4f,%.2f,%.2f,%.2f,%s",
+            target_id, amount, angle, force, s, avx, at)
         Network.server:send(payload, 0, "reliable")
     end
 end
@@ -168,24 +170,31 @@ function Network.update(local_player)
                 elseif data:sub(1, 7) == "damage:" then
                     local parts = data:sub(8)
                     if parts:sub(1, 4) == "bot_" then
-                        local bid, amount, angle, force, slow = parts:match("([^,]+),([^,]+),([^,]+),([^,]+),([^,]+)")
-                        if bid and amount and angle and force then
-                            Network.pending_damage = {
-                                target_id = bid,
-                                amount = tonumber(amount),
-                                knockback = tonumber(angle),
-                                force = tonumber(force),
-                                slow = tonumber(slow) or 0
-                            }
+                        local bid, rest = parts:match("([^,]+),(.+)")
+                        if bid and rest then
+                            local amount, angle, force, slow, avx, at = rest:match("([^,]+),([^,]+),([^,]+),([^,]+),([^,]+),(.*)")
+                            if amount and angle and force then
+                                Network.pending_damage = {
+                                    target_id = bid,
+                                    amount = tonumber(amount),
+                                    knockback = tonumber(angle),
+                                    force = tonumber(force),
+                                    slow = tonumber(slow) or 0,
+                                    attacker_vx = tonumber(avx) or 0,
+                                    attack_type = at or ""
+                                }
+                            end
                         end
                     else
-                        local amount, angle, force, slow = parts:match("([^,]+),([^,]+),([^,]+),([^,]+)")
+                        local amount, angle, force, slow, avx, at = parts:match("([^,]+),([^,]+),([^,]+),([^,]+),([^,]+),(.*)")
                         if amount and angle and force then
                             Network.pending_damage = {
                                 amount = tonumber(amount),
                                 knockback = tonumber(angle),
                                 force = tonumber(force),
-                                slow = tonumber(slow) or 0
+                                slow = tonumber(slow) or 0,
+                                attacker_vx = tonumber(avx) or 0,
+                                attack_type = at or ""
                             }
                         end
                     end

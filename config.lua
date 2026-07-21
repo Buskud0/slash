@@ -13,8 +13,8 @@ return {
     -- Combat Constants
     SWING_DURATION = 0.12,
     STAB_DURATION = 0.15,
-    SWING_COOLDOWN = 1.0,
-    STAB_COOLDOWN = 1.0,
+    SWORD_COOLDOWN_HIT = 1,
+    SWORD_COOLDOWN_MISS = 2,
     STAB_LENGTH = 50,
     SWING_LENGTH = 35,
     SWING_DAMAGE = 10,
@@ -29,8 +29,10 @@ return {
     DASH_SPEED_MULTIPLIER = 3,
 
     -- Physics Constants
-    KNOCKBACK_FORCE = 400,
+    KNOCKBACK_FORCE = 250,
     KNOCKBACK_DECAY = 8,
+    KNOCKBACK_VELOCITY_MULTIPLIER = 4,
+    SWING_LIFT_FORCE = 180,
     AIR_FRICTION = 6,
     GRAVITY_HIT_REDUCTION = 0.25,
     GRAVITY_JUMP_RELEASE_MULTIPLIER = 3.0,
@@ -55,7 +57,7 @@ return {
     HOOK_RANGE = 120,
     HOOK_COOLDOWN = 3,
     HOOK_SIZE = 3,
-    HOOK_PULL_FORCE = 400,
+    HOOK_PULL_FORCE = 300,
 
     -- Bot Constants
     BOT_COUNT = 1,

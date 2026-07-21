@@ -54,15 +54,20 @@ local function on_receive(id, data)
         add_log("Guest " .. id .. ": " .. chat_msg)
     elseif data:sub(1, 7) == "damage:" then
         local parts = data:sub(8)
-        local target_id, amount, angle, force, slow = parts:match("([^,]+),([^,]+),([^,]+),([^,]+),([^,]+)")
-        if target_id and amount and angle and force then
-            if target_id:sub(1, 4) == "bot_" then
-                Server.host:broadcast("damage:" .. target_id .. "," .. amount .. "," .. angle .. "," .. force .. "," .. (slow or "0"), 0, "reliable")
-            else
-                local target = Server.clients[target_id]
-                if target and target.peer then
-                    local s = slow or "0"
-                    target.peer:send("damage:" .. amount .. "," .. angle .. "," .. force .. "," .. s, 0, "reliable")
+        local target_id, rest = parts:match("([^,]+),(.+)")
+        if target_id and rest then
+            local amount, angle, force, slow, avx, at = rest:match("([^,]+),([^,]+),([^,]+),([^,]+),([^,]+),(.*)")
+            if amount and angle and force then
+                local s = slow or "0"
+                local v = avx or "0"
+                local a = at or ""
+                if target_id:sub(1, 4) == "bot_" then
+                    Server.host:broadcast("damage:" .. target_id .. "," .. amount .. "," .. angle .. "," .. force .. "," .. s .. "," .. v .. "," .. a, 0, "reliable")
+                else
+                    local target = Server.clients[target_id]
+                    if target and target.peer then
+                        target.peer:send("damage:" .. amount .. "," .. angle .. "," .. force .. "," .. s .. "," .. v .. "," .. a, 0, "reliable")
+                    end
                 end
             end
         end

@@ -21,6 +21,7 @@ function Player.new(spawn_x, spawn_y)
         stab = 0,
         swing = 0
     }
+    self.attack_landed = false
     self.jump_cooldown = 0
     self.attack_angle = 0
     self.attack_type = nil

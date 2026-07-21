@@ -7,6 +7,7 @@ local Renderer = require "renderer"
 local Server = require "server"
 local Chat = require "chat"
 local Bot = require "bot"
+local Menu = require "menu"
 
 -- Game orchestration state
 local game_state = "connecting"
@@ -47,9 +48,16 @@ local function get_sword_tip(player)
         local duration = config.STAB_DURATION
         local progress = (duration - math.abs(timer)) / duration
         local radius = math.sin(progress * math.pi) * config.STAB_LENGTH
-        local tip_x = center_x + math.cos(face) * radius
-        local tip_y = center_y + math.sin(face) * radius
-        return tip_x, tip_y, face
+        local stab_angles = {
+            stab_right = 0,
+            stab_left = math.pi,
+            stab_down = math.pi / 2,
+            stab_up = -math.pi / 2,
+        }
+        local angle = stab_angles[at] or (face == 1 and 0 or math.pi)
+        local tip_x = center_x + math.cos(angle) * radius
+        local tip_y = center_y + math.sin(angle) * radius
+        return tip_x, tip_y, angle
 
     elseif at == "swing_up_left" then
         local progress = (config.SWING_DURATION - timer) / config.SWING_DURATION
@@ -85,31 +93,37 @@ local function get_sword_tip(player)
 end
 
 local function check_line_collision(cx, cy, tx, ty, bx, by, bw, bh)
-    local dx = tx - cx
-    local dy = ty - cy
-    local len_sq = dx * dx + dy * dy
-    if len_sq == 0 then return false end
-
-    local function clamp(v, lo, hi)
-        if v < lo then return lo end
-        if v > hi then return hi end
-        return v
+    local function point_in_rect(px, py)
+        return px >= bx and px <= bx + bw and py >= by and py <= by + bh
     end
 
-    local closest_x = clamp(cx, bx, bx + bw)
-    local closest_y = clamp(cy, by, by + bh)
+    if point_in_rect(tx, ty) then return true end
 
-    local t = ((closest_x - cx) * dx + (closest_y - cy) * dy) / len_sq
-    t = clamp(t, 0, 1)
+    local steps = 10
+    for i = 1, steps - 1 do
+        local t = i / steps
+        local px = cx + (tx - cx) * t
+        local py = cy + (ty - cy) * t
+        if point_in_rect(px, py) then return true end
+    end
 
-    local px = cx + dx * t
-    local py = cy + dy * t
+    local function seg_cross_edge(ex1, ey1, ex2, ey2)
+        local d1x, d1y = tx - cx, ty - cy
+        local d2x, d2y = ex2 - ex1, ey2 - ey1
+        local cross = d1x * d2y - d1y * d2x
+        if math.abs(cross) < 1e-10 then return false end
+        local ox, oy = ex1 - cx, ey1 - cy
+        local t = (ox * d2y - oy * d2x) / cross
+        local u = (ox * d1y - oy * d1x) / cross
+        return t >= 0 and t <= 1 and u >= 0 and u <= 1
+    end
 
-    local closest_x2 = clamp(px, bx, bx + bw)
-    local closest_y2 = clamp(py, by, by + bh)
+    if seg_cross_edge(bx, by, bx + bw, by) then return true end
+    if seg_cross_edge(bx, by + bh, bx + bw, by + bh) then return true end
+    if seg_cross_edge(bx, by, bx, by + bh) then return true end
+    if seg_cross_edge(bx + bw, by, bx + bw, by + bh) then return true end
 
-    local dist_sq = (px - closest_x2) ^ 2 + (py - closest_y2) ^ 2
-    return dist_sq <= 1
+    return false
 end
 
 local function check_collisions()
@@ -128,15 +142,6 @@ local function check_collisions()
                 
                 if check_line_collision(cx, cy, tx, ty, bx, by, bw, bh) then
                     last_hit_by[id] = attack_id
-                    Physics.apply_knockback(local_player, contact_angle)
-                    
-                    local at = p.attack_type or ""
-                    local damage = config.SWING_DAMAGE
-                    if at:sub(1, 4) == "stab" then
-                        damage = config.STAB_DAMAGE
-                    end
-                    Physics.take_damage(local_player, damage)
-                    Renderer.add_damage(local_player.x, local_player.y, damage)
                     break
                 end
             end
@@ -145,7 +150,7 @@ local function check_collisions()
 
     -- Bot collisions: network players hitting bots
     for id, p in pairs(network_players) do
-        if p.attack_timer and math.abs(p.attack_timer) > 0 then
+        if id ~= my_id and p.attack_timer and math.abs(p.attack_timer) > 0 then
             local attack_id = p.attack_id or 0
             local hit_key = id .. "_bots"
             if last_hit_by[hit_key] ~= attack_id then
@@ -164,7 +169,7 @@ local function check_collisions()
                         if at:sub(1, 4) == "stab" then
                             damage = config.STAB_DAMAGE
                         end
-                        Physics.apply_knockback(bot, contact_angle)
+                        Physics.apply_knockback(bot, contact_angle, nil, nil, at)
                         Physics.take_damage(bot, damage)
                         Renderer.add_damage(bot.x, bot.y, damage)
                         break
@@ -205,9 +210,9 @@ local function check_collisions()
 
                 if check_line_collision(cx, cy, tx, ty, bx, by, bw, bh) then
                     last_hit_by[hit_key] = attack_id
-                    Physics.apply_knockback(local_player, contact_angle)
-
                     local at = bot.attack_type or ""
+                    Physics.apply_knockback(local_player, contact_angle, nil, bot.air_velocity_x, at)
+
                     local damage = config.SWING_DAMAGE
                     if at:sub(1, 4) == "stab" then
                         damage = config.STAB_DAMAGE
@@ -239,6 +244,14 @@ local function check_local_player_hits()
                 local attack_id = local_player.attack_id or 0
                 if last_hit_targets[id] ~= attack_id then
                     last_hit_targets[id] = attack_id
+                    local_player.attack_landed = true
+                    local at = local_player.attack_type or ""
+                    local damage = config.SWING_DAMAGE
+                    if at:sub(1, 4) == "stab" then
+                        damage = config.STAB_DAMAGE
+                    end
+                    Network.send_damage(id, damage, contact_angle, config.KNOCKBACK_FORCE, 0, local_player.air_velocity_x, at)
+                    Renderer.add_damage(p.x, p.y, damage)
                 end
             end
         end
@@ -251,17 +264,18 @@ local function check_local_player_hits()
         local bw = config.SPRITE_SIZE
         local bh = bot.height
         
-        if check_line_collision(cx, cy, tx, ty, bx, by, bw, bh) then
+                if check_line_collision(cx, cy, tx, ty, bx, by, bw, bh) then
             local attack_id = local_player.attack_id or 0
             local hit_key = "bot_" .. bi
             if last_hit_targets[hit_key] ~= attack_id then
                 last_hit_targets[hit_key] = attack_id
+                local_player.attack_landed = true
                 local at = local_player.attack_type or ""
                 local damage = config.SWING_DAMAGE
                 if at:sub(1, 4) == "stab" then
                     damage = config.STAB_DAMAGE
                 end
-                Physics.apply_knockback(bot, contact_angle)
+                        Physics.apply_knockback(bot, contact_angle, nil, local_player.air_velocity_x, at)
                 Physics.take_damage(bot, damage)
                 Renderer.add_damage(bot.x, bot.y, damage)
             end
@@ -737,7 +751,7 @@ local function run_client(dt)
         mouse_x = 0, mouse_y = 0
     }
     
-    if not Chat.is_typing then
+    if not Chat.is_typing and not Menu.is_open then
         input_state = Input.get_state()
     end
 
@@ -773,7 +787,7 @@ local function run_client(dt)
             end
         end
         for i, bot in ipairs(bots) do
-            local bot_input = Bot.get_input(bot, enemies)
+            local bot_input = Bot.get_input(bot, enemies, Menu.get_settings())
             Physics.update(bot, dt, bot_input)
         end
         Network.send_bots(encode_bots(bots))
@@ -797,9 +811,7 @@ local function run_client(dt)
         else
             Physics.take_damage(local_player, pending_damage.amount)
             Renderer.add_damage(local_player.x, local_player.y, pending_damage.amount)
-            if pending_damage.knockback ~= 0 then
-                Physics.apply_knockback(local_player, pending_damage.knockback, pending_damage.force)
-            end
+            Physics.apply_knockback(local_player, pending_damage.knockback, pending_damage.force, pending_damage.attacker_vx, pending_damage.attack_type)
             if pending_damage.slow and pending_damage.slow > 0 then
                 Physics.apply_net_slow(local_player, pending_damage.slow)
             end
@@ -872,6 +884,7 @@ function love.draw()
         love.graphics.print("Searching for game...", 20, 20)
     else
         Renderer.draw(local_player, network_players, my_id, bots)
+        Menu.draw()
         Chat.draw()
     end
 end
@@ -884,6 +897,14 @@ end
 
 function love.keypressed(key)
     if game_state == "client_only" or game_state == "host_and_client" then
+        if Menu.is_open then
+            Menu.keypressed(key)
+            return
+        end
+        if key == "escape" then
+            Menu.toggle()
+            return
+        end
         if key == "p" and not Chat.is_typing and (game_state == "host_and_client" or game_state == "client_only") then
             Network.send_toggle_bots()
             return
@@ -892,6 +913,12 @@ function love.keypressed(key)
         if msg then
             Network.send_chat(msg)
         end
+    end
+end
+
+function love.mousepressed(x, y, button)
+    if Menu.is_open then
+        Menu.mousepressed(x, y)
     end
 end
 
