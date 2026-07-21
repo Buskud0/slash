@@ -218,6 +218,8 @@ end
 function Physics.take_damage(player, amount)
     player.health = math.max(0, player.health - amount)
     player.hit_gravity_timer = config.HIT_GRAVITY_DURATION
+    player.attack_timer = 0
+    player.attack_type = nil
     if player.health <= 0 then
         player.x = config.SPAWN_X
         player.y = config.SPAWN_Y

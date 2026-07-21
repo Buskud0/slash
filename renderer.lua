@@ -1,6 +1,7 @@
 local config = require "config"
 
 local Renderer = {}
+local damage_texts = {}
 
 local function draw_player_box(x, y, h, r, g, b)
     love.graphics.setColor(r, g, b)
@@ -133,7 +134,7 @@ end
 
 local function draw_bot_players(bots)
     for i, bot in ipairs(bots) do
-        draw_player_box(bot.x, bot.y, bot.height, 0.3, 0.5, 1)
+        draw_player_box(bot.x, bot.y, bot.height, 0.5, 0.5, 0.5)
         draw_nickname("Bot " .. i, bot.x, bot.y, bot.height)
         draw_health_bar(bot.x, bot.y - 5, bot.health)
 
@@ -157,6 +158,39 @@ local function draw_floor()
     love.graphics.line(0, config.GROUND_Y, screen_width, config.GROUND_Y)
 end
 
+function Renderer.add_damage(x, y, amount)
+    table.insert(damage_texts, {
+        x = x + config.SPRITE_SIZE / 2,
+        y = y - 5,
+        text = "-" .. amount,
+        timer = 0.8,
+        max_timer = 0.8,
+        color = {1, 1, 1}
+    })
+end
+
+function Renderer.add_clash(x, y)
+    table.insert(damage_texts, {
+        x = x,
+        y = y,
+        text = "*clash*",
+        timer = 0.6,
+        max_timer = 0.6,
+        color = {1, 0.85, 0.2}
+    })
+end
+
+function Renderer.update_damage_texts(dt)
+    for i = #damage_texts, 1, -1 do
+        local t = damage_texts[i]
+        t.timer = t.timer - dt
+        t.y = t.y - 30 * dt
+        if t.timer <= 0 then
+            table.remove(damage_texts, i)
+        end
+    end
+end
+
 function Renderer.draw(local_player, players, my_id, bots)
     love.graphics.push()
     love.graphics.scale(config.ZOOM, config.ZOOM)
@@ -166,6 +200,15 @@ function Renderer.draw(local_player, players, my_id, bots)
     draw_bot_players(bots)
     draw_bullets(local_player.bullets)
     draw_hook(local_player.hook, local_player.x, local_player.y, local_player.height)
+
+    for _, t in ipairs(damage_texts) do
+        local alpha = math.min(1, t.timer / (t.max_timer * 0.3))
+        local c = t.color or {1, 1, 1}
+        love.graphics.setColor(c[1], c[2], c[3], alpha)
+        local font = love.graphics.getFont()
+        local tw = font:getWidth(t.text) * 0.35
+        love.graphics.print(t.text, t.x - tw / 2, t.y, 0, 0.35, 0.35)
+    end
     
     love.graphics.pop()
 end

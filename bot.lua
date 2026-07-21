@@ -58,6 +58,11 @@ function Bot.get_input(bot, enemies)
         input.shootBullet = true
         input.attackStab = false
         input.attackSlash = false
+    elseif nearest_dist > config.HOOK_RANGE * 0.5 and nearest_dist < config.HOOK_RANGE * 2 and roll > 0.6 then
+        input.hook = true
+        input.attackStab = false
+        input.attackSlash = false
+        input.shootBullet = false
     elseif nearest_dist < config.HOOK_RANGE * 2 and roll > 0.7 then
         input.shootBullet = true
     end

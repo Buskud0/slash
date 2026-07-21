@@ -85,16 +85,31 @@ local function get_sword_tip(player)
 end
 
 local function check_line_collision(cx, cy, tx, ty, bx, by, bw, bh)
-    for i = 1, 3 do
-        local t = i / 3
-        local px = cx + (tx - cx) * t
-        local py = cy + (ty - cy) * t
-        
-        if px >= bx and px <= bx + bw and py >= by and py <= by + bh then
-            return true
-        end
+    local dx = tx - cx
+    local dy = ty - cy
+    local len_sq = dx * dx + dy * dy
+    if len_sq == 0 then return false end
+
+    local function clamp(v, lo, hi)
+        if v < lo then return lo end
+        if v > hi then return hi end
+        return v
     end
-    return false
+
+    local closest_x = clamp(cx, bx, bx + bw)
+    local closest_y = clamp(cy, by, by + bh)
+
+    local t = ((closest_x - cx) * dx + (closest_y - cy) * dy) / len_sq
+    t = clamp(t, 0, 1)
+
+    local px = cx + dx * t
+    local py = cy + dy * t
+
+    local closest_x2 = clamp(px, bx, bx + bw)
+    local closest_y2 = clamp(py, by, by + bh)
+
+    local dist_sq = (px - closest_x2) ^ 2 + (py - closest_y2) ^ 2
+    return dist_sq <= 1
 end
 
 local function check_collisions()
@@ -121,6 +136,7 @@ local function check_collisions()
                         damage = config.STAB_DAMAGE
                     end
                     Physics.take_damage(local_player, damage)
+                    Renderer.add_damage(local_player.x, local_player.y, damage)
                     break
                 end
             end
@@ -150,6 +166,7 @@ local function check_collisions()
                         end
                         Physics.apply_knockback(bot, contact_angle)
                         Physics.take_damage(bot, damage)
+                        Renderer.add_damage(bot.x, bot.y, damage)
                         break
                     end
                 end
@@ -196,6 +213,7 @@ local function check_collisions()
                         damage = config.STAB_DAMAGE
                     end
                     Physics.take_damage(local_player, damage)
+                    Renderer.add_damage(local_player.x, local_player.y, damage)
                 end
             end
         end
@@ -245,125 +263,198 @@ local function check_local_player_hits()
                 end
                 Physics.apply_knockback(bot, contact_angle)
                 Physics.take_damage(bot, damage)
+                Renderer.add_damage(bot.x, bot.y, damage)
             end
         end
     end
 end
 
-local function check_hook_bullet_collide()
-    local half = config.NET_SIZE / 2
+local function check_projectile_collisions()
+    local half_hook = config.HOOK_SIZE / 2
+    local half_net = config.NET_SIZE / 2
 
+    local hooks = {}
     if local_player.hook then
-        local h = local_player.hook
-        for bi, bot in ipairs(bots) do
-            for i = #bot.bullets, 1, -1 do
-                local b = bot.bullets[i]
-                if math.abs(b.x - h.x) < half + config.HOOK_SIZE / 2 and math.abs(b.y - h.y) < half + config.HOOK_SIZE / 2 then
-                    Physics.remove_bullet(bot, i)
-                    local_player.hook = nil
-                    return
-                end
-            end
-        end
-
-        for id, p in pairs(network_players) do
-            if id ~= my_id and p.bullets then
-                for i = #p.bullets, 1, -1 do
-                    local b = p.bullets[i]
-                    if math.abs(b.x - h.x) < half + config.HOOK_SIZE / 2 and math.abs(b.y - h.y) < half + config.HOOK_SIZE / 2 then
-                        table.remove(p.bullets, i)
-                        local_player.hook = nil
-                        return
-                    end
-                end
-            end
-        end
+        hooks[#hooks + 1] = { h = local_player.hook, owner = "local", remove = function() local_player.hook = nil end }
     end
-
-    for i = #local_player.bullets, 1, -1 do
-        local b = local_player.bullets[i]
-        for bi, bot in ipairs(bots) do
-            if bot.hook then
-                local hk = bot.hook
-                if math.abs(b.x - hk.x) < half + config.HOOK_SIZE / 2 and math.abs(b.y - hk.y) < half + config.HOOK_SIZE / 2 then
-                    Physics.remove_bullet(local_player, i)
-                    bot.hook = nil
-                    break
-                end
-            end
-        end
-    end
-end
-
-local function check_sword_deflects_bullets()
-    if local_player.attack_timer == 0 then return end
-
-    local tx, ty = get_sword_tip(local_player)
-    local cx = local_player.x + (config.SPRITE_SIZE / 2)
-    local cy = local_player.y + (local_player.height / 2)
-
     for bi, bot in ipairs(bots) do
-        for i = #bot.bullets, 1, -1 do
-            local b = bot.bullets[i]
-            local half = config.NET_SIZE / 2
-            if check_line_collision(cx, cy, tx, ty, b.x - half, b.y - half, config.NET_SIZE, config.NET_SIZE) then
-                Physics.remove_bullet(bot, i)
-            end
+        if bot.hook then
+            local idx = bi
+            hooks[#hooks + 1] = { h = bot.hook, owner = "bot", remove = function() bots[idx].hook = nil end }
+        end
+    end
+    for id, p in pairs(network_players) do
+        if id ~= my_id and p.hook then
+            local pid = id
+            hooks[#hooks + 1] = { h = p.hook, owner = "net", id = pid, remove = function() if network_players[pid] then network_players[pid].hook = nil end end }
         end
     end
 
+    local bullets = {}
+    for i, b in ipairs(local_player.bullets) do
+        local idx = i
+        bullets[#bullets + 1] = { b = b, owner = "local", remove = function() Physics.remove_bullet(local_player, idx) end }
+    end
+    for bi, bot in ipairs(bots) do
+        for i, b in ipairs(bot.bullets) do
+            local bii, ii = bi, i
+            bullets[#bullets + 1] = { b = b, owner = "bot", remove = function() Physics.remove_bullet(bots[bii], ii) end }
+        end
+    end
     for id, p in pairs(network_players) do
         if id ~= my_id and p.bullets then
-            for i = #p.bullets, 1, -1 do
-                local b = p.bullets[i]
-                local half = config.NET_SIZE / 2
-                if check_line_collision(cx, cy, tx, ty, b.x - half, b.y - half, config.NET_SIZE, config.NET_SIZE) then
-                    table.remove(p.bullets, i)
-                end
+            for i, b in ipairs(p.bullets) do
+                local pid, ii = id, i
+                bullets[#bullets + 1] = { b = b, owner = "net", id = pid, remove = function() if network_players[pid] and network_players[pid].bullets then table.remove(network_players[pid].bullets, ii) end end }
             end
         end
     end
-end
 
-local function check_nets_collide()
-    local function nets_overlap(a, b)
-        local half = config.NET_SIZE / 2
-        return math.abs(a.x - b.x) < config.NET_SIZE and math.abs(a.y - b.y) < config.NET_SIZE
+    local function hook_bullet_close(hb, bb)
+        return math.abs(hb.x - bb.x) < half_hook + half_net and math.abs(hb.y - bb.y) < half_hook + half_net
     end
 
-    for i = #local_player.bullets, 1, -1 do
-        local b = local_player.bullets[i]
-        local removed = false
+    local removed_hooks = {}
+    local removed_bullets = {}
 
-        for bi, bot in ipairs(bots) do
-            for j = #bot.bullets, 1, -1 do
-                local ob = bot.bullets[j]
-                if nets_overlap(b, ob) then
-                    Physics.remove_bullet(bot, j)
-                    Physics.remove_bullet(local_player, i)
-                    removed = true
-                    break
-                end
-            end
-            if removed then break end
-        end
-
-        if not removed then
-            for id, p in pairs(network_players) do
-                if id ~= my_id and p.bullets then
-                    for j = #p.bullets, 1, -1 do
-                        local ob = p.bullets[j]
-                        if nets_overlap(b, ob) then
-                            table.remove(p.bullets, j)
-                            Physics.remove_bullet(local_player, i)
-                            removed = true
-                            break
-                        end
+    for hi = 1, #hooks do
+        if not removed_hooks[hi] then
+            for bi = 1, #bullets do
+                if not removed_bullets[bi] then
+                    if hook_bullet_close(hooks[hi].h, bullets[bi].b) then
+                        local hx, hy = hooks[hi].h.x, hooks[hi].h.y
+                        local bx, by = bullets[bi].b.x, bullets[bi].b.y
+                        Renderer.add_clash((hx + bx) / 2, (hy + by) / 2)
+                        removed_hooks[hi] = true
+                        removed_bullets[bi] = true
                     end
-                    if removed then break end
                 end
             end
         end
+    end
+
+    for hi = 1, #hooks do
+        if not removed_hooks[hi] then
+            for hj = hi + 1, #hooks do
+                if not removed_hooks[hj] then
+                    local a, b = hooks[hi].h, hooks[hj].h
+                    if math.abs(a.x - b.x) < half_hook * 2 and math.abs(a.y - b.y) < half_hook * 2 then
+                        Renderer.add_clash((a.x + b.x) / 2, (a.y + b.y) / 2)
+                        removed_hooks[hi] = true
+                        removed_hooks[hj] = true
+                    end
+                end
+            end
+        end
+    end
+
+    for bi = 1, #bullets do
+        if not removed_bullets[bi] then
+            for bj = bi + 1, #bullets do
+                if not removed_bullets[bj] then
+                    local a, b = bullets[bi].b, bullets[bj].b
+                    if math.abs(a.x - b.x) < config.NET_SIZE and math.abs(a.y - b.y) < config.NET_SIZE then
+                        Renderer.add_clash((a.x + b.x) / 2, (a.y + b.y) / 2)
+                        removed_bullets[bi] = true
+                        removed_bullets[bj] = true
+                    end
+                end
+            end
+        end
+    end
+
+    local swords = {}
+    if local_player.attack_timer ~= 0 then
+        local tx, ty = get_sword_tip(local_player)
+        local cx = local_player.x + (config.SPRITE_SIZE / 2)
+        local cy = local_player.y + (local_player.height / 2)
+        swords[#swords + 1] = { cx = cx, cy = cy, tx = tx, ty = ty, owner = "local" }
+    end
+    for bi, bot in ipairs(bots) do
+        if bot.attack_timer ~= 0 then
+            local tx, ty = get_sword_tip(bot)
+            local cx = bot.x + (config.SPRITE_SIZE / 2)
+            local cy = bot.y + (bot.height / 2)
+            swords[#swords + 1] = { cx = cx, cy = cy, tx = tx, ty = ty, owner = "bot" }
+        end
+    end
+    for id, p in pairs(network_players) do
+        if id ~= my_id and p.attack_timer and math.abs(p.attack_timer) > 0 then
+            local tx, ty = get_sword_tip(p)
+            local cx = p.x + (config.SPRITE_SIZE / 2)
+            local cy = p.y + (p.height / 2)
+            swords[#swords + 1] = { cx = cx, cy = cy, tx = tx, ty = ty, owner = "net" }
+        end
+    end
+
+    for _, sw in ipairs(swords) do
+        for hi = 1, #hooks do
+            if not removed_hooks[hi] then
+                local hk = hooks[hi].h
+                local hk_half = config.HOOK_SIZE / 2
+                if check_line_collision(sw.cx, sw.cy, sw.tx, sw.ty, hk.x - hk_half, hk.y - hk_half, config.HOOK_SIZE, config.HOOK_SIZE) then
+                    Renderer.add_clash((sw.tx + hk.x) / 2, (sw.ty + hk.y) / 2)
+                    removed_hooks[hi] = true
+                end
+            end
+        end
+        for bi = 1, #bullets do
+            if not removed_bullets[bi] then
+                local bb = bullets[bi].b
+                if check_line_collision(sw.cx, sw.cy, sw.tx, sw.ty, bb.x - half_net, bb.y - half_net, config.NET_SIZE, config.NET_SIZE) then
+                    Renderer.add_clash((sw.tx + bb.x) / 2, (sw.ty + bb.y) / 2)
+                    removed_bullets[bi] = true
+                end
+            end
+        end
+    end
+
+    local removed_swords = {}
+    for i = 1, #swords do
+        for j = i + 1, #swords do
+            if not removed_swords[i] and not removed_swords[j] then
+                local a, b = swords[i], swords[j]
+                local dx1, dy1 = a.tx - a.cx, a.ty - a.cy
+                local dx2, dy2 = b.tx - b.cx, b.ty - b.cy
+                local denom = dx1 * dy2 - dy1 * dx2
+                if math.abs(denom) > 0.0001 then
+                    local t = ((b.cx - a.cx) * dy2 - (b.cy - a.cy) * dx2) / denom
+                    local u = ((b.cx - a.cx) * dy1 - (b.cy - a.cy) * dx1) / denom
+                    if t >= 0 and t <= 1 and u >= 0 and u <= 1 then
+                        local ix = a.cx + dx1 * t
+                        local iy = a.cy + dy1 * t
+                        Renderer.add_clash(ix, iy)
+                        removed_swords[i] = true
+                        removed_swords[j] = true
+                    end
+                end
+            end
+        end
+    end
+    for si, _ in pairs(removed_swords) do
+        local sw = swords[si]
+        if sw.owner == "local" then
+            local_player.attack_timer = 0
+            local_player.attack_type = nil
+        elseif sw.owner == "bot" then
+            local bi = nil
+            for ii, b in ipairs(bots) do
+                if b.x + config.SPRITE_SIZE / 2 == sw.cx then bi = ii; break end
+            end
+            if bi then bots[bi].attack_timer = 0; bots[bi].attack_type = nil end
+        elseif sw.owner == "net" and sw.id then
+            if network_players[sw.id] then
+                network_players[sw.id].attack_timer = 0
+                network_players[sw.id].attack_type = nil
+            end
+        end
+    end
+
+    for hi, _ in pairs(removed_hooks) do
+        hooks[hi].remove()
+    end
+    for bi, _ in pairs(removed_bullets) do
+        bullets[bi].remove()
     end
 end
 
@@ -480,6 +571,69 @@ local function check_hook_hits(dt)
                 break
             end
         end
+    end
+end
+
+local function check_bot_hook_hits()
+    for bi, bot in ipairs(bots) do
+        if not bot.hook then goto continue_bot end
+
+        local h = bot.hook
+        local bcx = bot.x + (config.SPRITE_SIZE / 2)
+        local bcy = bot.y + (bot.height / 2)
+
+        if h.target_id then
+            local target
+            if h.target_id == "local" then
+                target = local_player
+            else
+                target = network_players[h.target_id]
+            end
+            if target then
+                h.x = target.x + (config.SPRITE_SIZE / 2)
+                h.y = target.y + (target.height or config.PLAYER_STAND_HEIGHT) / 2
+                local d = math.sqrt((bcx - h.x) ^ 2 + (bcy - h.y) ^ 2)
+                if h.initial_dist == 0 or d <= h.initial_dist * 0.3 then
+                    bot.hook = nil
+                else
+                    if h.target_id == "local" then
+                        Physics.apply_pull(local_player, bcx, bcy, h.dx, h.dy)
+                    else
+                        Network.send_pull(h.target_id, bcx, bcy, h.dx, h.dy)
+                    end
+                end
+            else
+                bot.hook = nil
+            end
+            goto continue_bot
+        end
+
+        if math.abs(h.x - (local_player.x + config.SPRITE_SIZE / 2)) < config.SPRITE_SIZE and
+           math.abs(h.y - (local_player.y + local_player.height / 2)) < local_player.height then
+            h.target_id = "local"
+            h.x = local_player.x + config.SPRITE_SIZE / 2
+            h.y = local_player.y + local_player.height / 2
+            h.initial_dist = math.sqrt((bcx - h.x) ^ 2 + (bcy - h.y) ^ 2)
+            goto continue_bot
+        end
+
+        for id, p in pairs(network_players) do
+            if id ~= my_id then
+                local bx = p.x
+                local by = p.y
+                local bw = config.SPRITE_SIZE
+                local bh = p.height or config.PLAYER_STAND_HEIGHT
+                if h.x >= bx and h.x <= bx + bw and h.y >= by and h.y <= by + bh then
+                    h.target_id = id
+                    h.x = bx + bw / 2
+                    h.y = by + bh / 2
+                    h.initial_dist = math.sqrt((bcx - h.x) ^ 2 + (bcy - h.y) ^ 2)
+                    break
+                end
+            end
+        end
+
+        ::continue_bot::
     end
 end
 
@@ -642,6 +796,7 @@ local function run_client(dt)
             end
         else
             Physics.take_damage(local_player, pending_damage.amount)
+            Renderer.add_damage(local_player.x, local_player.y, pending_damage.amount)
             if pending_damage.knockback ~= 0 then
                 Physics.apply_knockback(local_player, pending_damage.knockback, pending_damage.force)
             end
@@ -667,12 +822,13 @@ local function run_client(dt)
 
     check_collisions()
     check_local_player_hits()
-    check_sword_deflects_bullets()
-    check_hook_bullet_collide()
-    check_nets_collide()
+    check_projectile_collisions()
     check_bullet_hits()
     update_hook_tracking()
     check_hook_hits(dt)
+    if is_host then
+        check_bot_hook_hits()
+    end
 
     if lost then
         game_state = "connecting"
@@ -705,6 +861,7 @@ function love.update(dt)
             Server.update(dt) 
         end
         run_client(dt)
+        Renderer.update_damage_texts(dt)
         Chat.update(dt)
     end
 end

@@ -51,7 +51,7 @@ return {
     NET_SLOW_MULTIPLIER = 0.2,
 
     -- Hook Constants
-    HOOK_SPEED = 400,
+    HOOK_SPEED = 300,
     HOOK_RANGE = 120,
     HOOK_COOLDOWN = 3,
     HOOK_SIZE = 3,
