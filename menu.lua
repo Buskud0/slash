@@ -8,6 +8,7 @@ local bot_settings = {
     allow_swing = true,
     allow_net = true,
     allow_hook = true,
+    invincible = false,
     movement = "chase",
 }
 
@@ -20,6 +21,7 @@ local bot_toggles = {
     { key = "allow_swing", label = "Swing" },
     { key = "allow_net",   label = "Net" },
     { key = "allow_hook",  label = "Hook" },
+    { key = "invincible",  label = "Invincible" },
 }
 
 local movement_modes = {
@@ -147,9 +149,10 @@ function Menu.keypressed(key)
         elseif key == "2" then bot_settings.allow_swing = not bot_settings.allow_swing
         elseif key == "3" then bot_settings.allow_net = not bot_settings.allow_net
         elseif key == "4" then bot_settings.allow_hook = not bot_settings.allow_hook
-        elseif key == "5" then bot_settings.movement = "chase"
-        elseif key == "6" then bot_settings.movement = "stand_still"
-        elseif key == "7" then bot_settings.movement = "to_center"
+        elseif key == "5" then bot_settings.invincible = not bot_settings.invincible
+        elseif key == "6" then bot_settings.movement = "chase"
+        elseif key == "7" then bot_settings.movement = "stand_still"
+        elseif key == "8" then bot_settings.movement = "to_center"
         end
     end
 end

@@ -1,6 +1,8 @@
 local config = require "config"
 
 local Renderer = {}
+local Menu = require "menu"
+
 local damage_texts = {}
 
 local function draw_player_box(x, y, h, r, g, b)
@@ -133,10 +135,13 @@ local function draw_players(local_player, players, my_id)
 end
 
 local function draw_bot_players(bots)
+    local invincible = Menu.get_settings().invincible
     for i, bot in ipairs(bots) do
         draw_player_box(bot.x, bot.y, bot.height, 0.5, 0.5, 0.5)
         draw_nickname("Bot " .. i, bot.x, bot.y, bot.height)
-        draw_health_bar(bot.x, bot.y - 5, bot.health)
+        if not invincible then
+            draw_health_bar(bot.x, bot.y - 5, bot.health)
+        end
 
         if math.abs(bot.attack_timer) > 0 then
             draw_sword_attack(bot.x, bot.y, bot.height, bot.view_facing or bot.facing, bot.attack_timer, bot.attack_type)

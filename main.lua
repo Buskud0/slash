@@ -170,7 +170,9 @@ local function check_collisions()
                             damage = config.STAB_DAMAGE
                         end
                         Physics.apply_knockback(bot, contact_angle, nil, nil, at)
-                        Physics.take_damage(bot, damage)
+                        if not Menu.get_settings().invincible then
+                            Physics.take_damage(bot, damage)
+                        end
                         Renderer.add_damage(bot.x, bot.y, damage)
                         break
                     end
@@ -276,7 +278,9 @@ local function check_local_player_hits()
                     damage = config.STAB_DAMAGE
                 end
                         Physics.apply_knockback(bot, contact_angle, nil, local_player.air_velocity_x, at)
-                Physics.take_damage(bot, damage)
+                if not Menu.get_settings().invincible then
+                    Physics.take_damage(bot, damage)
+                end
                 Renderer.add_damage(bot.x, bot.y, damage)
             end
         end
@@ -403,7 +407,7 @@ local function check_projectile_collisions()
 
     for _, sw in ipairs(swords) do
         for hi = 1, #hooks do
-            if not removed_hooks[hi] then
+            if not removed_hooks[hi] and hooks[hi].owner ~= sw.owner then
                 local hk = hooks[hi].h
                 local hk_half = config.HOOK_SIZE / 2
                 if check_line_collision(sw.cx, sw.cy, sw.tx, sw.ty, hk.x - hk_half, hk.y - hk_half, config.HOOK_SIZE, config.HOOK_SIZE) then
@@ -413,7 +417,7 @@ local function check_projectile_collisions()
             end
         end
         for bi = 1, #bullets do
-            if not removed_bullets[bi] then
+            if not removed_bullets[bi] and bullets[bi].owner ~= sw.owner then
                 local bb = bullets[bi].b
                 if check_line_collision(sw.cx, sw.cy, sw.tx, sw.ty, bb.x - half_net, bb.y - half_net, config.NET_SIZE, config.NET_SIZE) then
                     Renderer.add_clash((sw.tx + bb.x) / 2, (sw.ty + bb.y) / 2)
