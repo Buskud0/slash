@@ -93,7 +93,8 @@ local function on_disconnect(id)
 end
 
 local function handle_events()
-    local event = Server.host:service(0)
+    local ok, event = pcall(Server.host.service, Server.host, 0)
+    if not ok then return end
     while event do
         local id = tostring(event.peer:index())
         
@@ -105,7 +106,9 @@ local function handle_events()
             on_disconnect(id)
         end
         
-        event = Server.host:service(0)
+        local ok2, next_event = pcall(Server.host.service, Server.host, 0)
+        if not ok2 then break end
+        event = next_event
     end
 end
 

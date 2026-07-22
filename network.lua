@@ -83,83 +83,87 @@ function Network.update(local_player)
     end
 
     if Network.host then
-        local event = Network.host:service(0)
-        while event do
-            if event.type == "receive" then
-                local data = event.data
-                if data:sub(1, 3) == "id:" then
-                    Network.my_id = data:sub(4)
-                elseif data:sub(1, 6) == "state:" then
-                    parse_state(data:sub(7))
-                elseif data:sub(1, 4) == "msg:" then
-                    Chat.add(data:sub(5))
-                elseif data:sub(1, 7) == "damage:" then
-                    local parts = data:sub(8)
-                    local target_id, amount, angle, force, slow, avx, at
-                    
-                    if Helpers.is_bot_id(parts) then
-                        local bid, rest = parts:match("([^,]+),(.+)")
-                        if bid and rest then
-                            target_id = bid
-                            amount, angle, force, slow, avx, at = rest:match("([^,]+),([^,]+),([^,]+),([^,]+),([^,]+),(.*)")
+        local ok, event = pcall(Network.host.service, Network.host, 0)
+        if ok and event then
+            while event do
+                if event.type == "receive" then
+                    local data = event.data
+                    if data:sub(1, 3) == "id:" then
+                        Network.my_id = data:sub(4)
+                    elseif data:sub(1, 6) == "state:" then
+                        parse_state(data:sub(7))
+                    elseif data:sub(1, 4) == "msg:" then
+                        Chat.add(data:sub(5))
+                    elseif data:sub(1, 7) == "damage:" then
+                        local parts = data:sub(8)
+                        local target_id, amount, angle, force, slow, avx, at
+                        
+                        if Helpers.is_bot_id(parts) then
+                            local bid, rest = parts:match("([^,]+),(.+)")
+                            if bid and rest then
+                                target_id = bid
+                                amount, angle, force, slow, avx, at = rest:match("([^,]+),([^,]+),([^,]+),([^,]+),([^,]+),(.*)")
+                            end
+                        else
+                            target_id = nil
+                            amount, angle, force, slow, avx, at = parts:match("([^,]+),([^,]+),([^,]+),([^,]+),([^,]+),(.*)")
                         end
-                    else
-                        target_id = nil
-                        amount, angle, force, slow, avx, at = parts:match("([^,]+),([^,]+),([^,]+),([^,]+),([^,]+),(.*)")
-                    end
-                    
-                    if amount and angle and force then
-                        local result = {
-                            amount = tonumber(amount),
-                            knockback = tonumber(angle),
-                            force = tonumber(force),
-                            slow = tonumber(slow) or 0,
-                            attacker_vx = tonumber(avx) or 0,
-                            attack_type = at or ""
-                        }
-                        if target_id then
-                            result.target_id = target_id
+                        
+                        if amount and angle and force then
+                            local result = {
+                                amount = tonumber(amount),
+                                knockback = tonumber(angle),
+                                force = tonumber(force),
+                                slow = tonumber(slow) or 0,
+                                attacker_vx = tonumber(avx) or 0,
+                                attack_type = at or ""
+                            }
+                            if target_id then
+                                result.target_id = target_id
+                            end
+                            Network.pending_damage = result
                         end
-                        Network.pending_damage = result
-                    end
-                elseif data:sub(1, 5) == "pull:" then
-                    local parts = data:sub(6)
-                    local target_id, tx, ty, dx, dy
-                    
-                    if Helpers.is_bot_id(parts) then
-                        local bid
-                        bid, tx, ty, dx, dy = parts:match("([^,]+),([^,]+),([^,]+),([^,]+),([^,]+)")
-                        if bid then
-                            target_id = bid
+                    elseif data:sub(1, 5) == "pull:" then
+                        local parts = data:sub(6)
+                        local target_id, tx, ty, dx, dy
+                        
+                        if Helpers.is_bot_id(parts) then
+                            local bid
+                            bid, tx, ty, dx, dy = parts:match("([^,]+),([^,]+),([^,]+),([^,]+),([^,]+)")
+                            if bid then
+                                target_id = bid
+                            end
+                        else
+                            tx, ty, dx, dy = parts:match("([^,]+),([^,]+),([^,]+),([^,]+)")
                         end
-                    else
-                        tx, ty, dx, dy = parts:match("([^,]+),([^,]+),([^,]+),([^,]+)")
-                    end
-                    
-                    if tx and ty and dx and dy then
-                        local result = {
-                            x = tonumber(tx),
-                            y = tonumber(ty),
-                            dx = tonumber(dx),
-                            dy = tonumber(dy)
-                        }
-                        if target_id then
-                            result.target_id = target_id
+                        
+                        if tx and ty and dx and dy then
+                            local result = {
+                                x = tonumber(tx),
+                                y = tonumber(ty),
+                                dx = tonumber(dx),
+                                dy = tonumber(dy)
+                            }
+                            if target_id then
+                                result.target_id = target_id
+                            end
+                            Network.pending_pull = result
                         end
-                        Network.pending_pull = result
+                    elseif data:sub(1, 5) == "bots:" then
+                        Network.pending_bots = data:sub(6)
+                    elseif data:sub(1, 12) == "toggle_bots:" then
+                        Network.pending_toggle = true
                     end
-                elseif data:sub(1, 5) == "bots:" then
-                    Network.pending_bots = data:sub(6)
-                elseif data:sub(1, 12) == "toggle_bots:" then
-                    Network.pending_toggle = true
+                elseif event.type == "disconnect" then
+                    Network.my_id = nil
+                    Network.players = {}
+                    Network.server = nil
+                    lost_connection = true
                 end
-            elseif event.type == "disconnect" then
-                Network.my_id = nil
-                Network.players = {}
-                Network.server = nil
-                lost_connection = true
+                local ok2, next_event = pcall(Network.host.service, Network.host, 0)
+                if not ok2 then break end
+                event = next_event
             end
-            event = Network.host:service(0)
         end
     end
 
