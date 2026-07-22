@@ -102,44 +102,31 @@ local function update_entity_trail(key, entity)
     return trail
 end
 
-local function draw_players(local_player, players, my_id)
-    local my_trail = update_entity_trail("local", local_player)
-    if #my_trail > 0 then V.draw_dash_trails(nil, my_trail) end
+local function draw_entities(local_player, players, my_id, bots)
+    local invincible = Menu.get_settings().invincible
+    local entities = {
+        { key = "local", entity = local_player, r = 0, g = 1, b = 0, name = "You", show_health = true, is_local = true }
+    }
     for id, p in pairs(players) do
-        local is_me = (id == my_id)
-        local px = is_me and local_player.x or p.x
-        local py = is_me and local_player.y or p.y
-        local h = is_me and local_player.height or (p.height or config.PLAYER_STAND_HEIGHT)
-        local move_facing = is_me and local_player.facing or (p.facing or 1)
-        local attack_facing = is_me and (local_player.view_facing or local_player.facing) or (p.view_facing or p.facing or 1)
-        local timer = is_me and local_player.attack_timer or (p.attack_timer or 0)
-        local hp = is_me and local_player.health or (p.health or config.MAX_HEALTH)
-        local at = is_me and local_player.attack_type or (p.attack_type or nil)
-        local slow = is_me and local_player.slow_timer or (p.slow_timer or 0)
-        local dt = is_me and local_player.dash_timer or (p.dash_timer or 0)
-
-        if not is_me then
-            local trail = update_entity_trail(id, p)
-            if #trail > 0 then V.draw_dash_trails(nil, trail) end
-        end
-
-        if is_me then
-            draw_entity(px, py, h, 0, 1, 0, "You", hp, true, timer, move_facing, attack_facing, at, slow, nil, nil, dt)
-        else
-            draw_entity(px, py, h, 1, 0, 0, "Guest " .. id, hp, true, timer, move_facing, attack_facing, at, slow, p.bullets, p.hook, dt)
+        if id ~= my_id then
+            table.insert(entities, { key = id, entity = p, r = 1, g = 0, b = 0, name = "Guest " .. id, show_health = true })
         end
     end
-end
-
-local function draw_bot_players(bots)
-    local invincible = Menu.get_settings().invincible
     for i, bot in ipairs(bots) do
-        local trail = update_entity_trail("bot_" .. i, bot)
+        table.insert(entities, { key = "bot_" .. i, entity = bot, r = 0.5, g = 0.5, b = 0.5, name = "Bot " .. i, show_health = not invincible })
+    end
+
+    for _, e in ipairs(entities) do
+        local ent = e.entity
+        local trail = update_entity_trail(e.key, ent)
         if #trail > 0 then V.draw_dash_trails(nil, trail) end
-        draw_entity(bot.x, bot.y, bot.height, 0.5, 0.5, 0.5, "Bot " .. i,
-            bot.health, not invincible, bot.attack_timer,
-            bot.facing, bot.view_facing or bot.facing, bot.attack_type, bot.slow_timer,
-            bot.bullets, bot.hook, bot.dash_timer or 0)
+        local move_facing = e.is_local and ent.facing or (ent.facing or 1)
+        local attack_facing = e.is_local and (ent.view_facing or ent.facing) or (ent.view_facing or ent.facing or 1)
+        local bullets = e.is_local and nil or ent.bullets
+        local hook = e.is_local and nil or ent.hook
+        draw_entity(ent.x, ent.y, ent.height, e.r, e.g, e.b, e.name,
+            ent.health, e.show_health, ent.attack_timer, move_facing, attack_facing,
+            ent.attack_type, ent.slow_timer, bullets, hook, ent.dash_timer or 0)
     end
 end
 
@@ -183,8 +170,7 @@ function Renderer.draw(local_player, players, my_id, bots)
     V.draw_background()
     V.draw_ground()
 
-    draw_players(local_player, players, my_id)
-    draw_bot_players(bots)
+    draw_entities(local_player, players, my_id, bots)
     draw_bullets(local_player.bullets)
     draw_hook(local_player.hook, local_player.x, local_player.y, local_player.height)
 

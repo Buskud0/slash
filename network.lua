@@ -64,51 +64,8 @@ local function parse_state(payload)
         if id_end then
             local id = player_data:sub(1, id_end - 1)
             local raw = player_data:sub(id_end + 1)
-
-            local px, py, ph, pf, pa, pat, paid, phealth, pslow, pavx, pDash = raw:match(
-                "([^,]+),([^,]+),([^,]+),([^,]+),([^,]+),([^,]+),([^,]+),([^,]+),([^,]+),([^,]+),([^,]+)")
-            if px and py and ph and pf and pa and pat and paid and phealth then
-                local view = {
-                    x = tonumber(px),
-                    y = tonumber(py),
-                    height = tonumber(ph),
-                    facing = tonumber(pf) / 100,
-                    attack_timer = tonumber(pa) / 100,
-                    attack_type = pat ~= "none" and pat or nil,
-                    attack_id = tonumber(paid) or 0,
-                    health = tonumber(phealth) or config.MAX_HEALTH,
-                    slow_timer = tonumber(pslow) or 0,
-                    air_velocity_x = (tonumber(pavx) or 0) / 100,
-                    dash_timer = (tonumber(pDash) or 0) / 100,
-                    bullets = {},
-                    hook = nil
-                }
-
-                local bullets_str = raw:match(",b:(.-),k:")
-                if not bullets_str then
-                    bullets_str = raw:match(",b:([^|]*)")
-                end
-                if bullets_str and #bullets_str > 0 then
-                    local idx = 1
-                    for bx, by in bullets_str:gmatch("([^,]+),([^,]+)") do
-                        view.bullets[idx] = { x = tonumber(bx), y = tonumber(by) }
-                        idx = idx + 1
-                    end
-                end
-
-                local hook_str = raw:match(",k:([^|]*)")
-                if hook_str and #hook_str > 0 then
-                    local hx, hy, hdx, hdy = hook_str:match("([^,]+),([^,]+),([^,]+),([^,]+)")
-                    if hx and hy then
-                        view.hook = {
-                            x = tonumber(hx),
-                            y = tonumber(hy),
-                            dx = tonumber(hdx) or 0,
-                            dy = tonumber(hdy) or 0
-                        }
-                    end
-                end
-
+            local view = Helpers.decode_entity(raw)
+            if view then
                 active[id] = view
             end
         end
@@ -120,43 +77,7 @@ function Network.update(local_player)
     local lost_connection = false
 
     if Network.server and Network.my_id and local_player then
-        local height = math.floor(local_player.height)
-        local facing = math.floor(local_player.facing * 100)
-        local attack_timer = math.floor(local_player.attack_timer * 100)
-        local attack_type = local_player.attack_type or "none"
-        local slow = math.floor((local_player.slow_timer or 0) * 100)
-
-        local payload = string.format("pos:%d,%d,%d,%d,%d,%s,%d,%d,%d,%d,%.1f",
-            math.floor(local_player.x),
-            math.floor(local_player.y),
-            height,
-            facing,
-            attack_timer,
-            attack_type,
-            local_player.attack_id or 0,
-            local_player.health or config.MAX_HEALTH,
-            slow,
-            math.floor((local_player.air_velocity_x or 0) * 100),
-            (local_player.dash_timer or 0) * 100
-        )
-
-        local bullets = local_player.bullets or {}
-        if #bullets > 0 then
-            payload = payload .. ",b:"
-            for i, b in ipairs(bullets) do
-                if i > 1 then payload = payload .. "," end
-                payload = payload .. math.floor(b.x) .. "," .. math.floor(b.y)
-            end
-        else
-            payload = payload .. ",b:"
-        end
-
-        local hook = local_player.hook
-        if hook then
-            payload = payload .. ",k:" .. math.floor(hook.x) .. "," .. math.floor(hook.y) .. "," .. string.format("%.2f", hook.dx) .. "," .. string.format("%.2f", hook.dy)
-        else
-            payload = payload .. ",k:"
-        end
+        local payload = "pos:" .. Helpers.encode_entity(local_player)
 
         Network.server:send(payload, 0, "unreliable")
     end

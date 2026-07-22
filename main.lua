@@ -82,10 +82,7 @@ local function check_line_collision(cx, cy, tx, ty, bx, by, bw, bh)
 end
 
 local function check_collisions()
-    local bx = local_player.x
-    local by = local_player.y
-    local bw = config.SPRITE_SIZE
-    local bh = local_player.height
+    local bx, by, bw, bh = Helpers.get_entity_hitbox(local_player)
     
     for id, p in pairs(network_players) do
         if id ~= my_id and p.attack_timer and math.abs(p.attack_timer) > 0 then
@@ -109,10 +106,7 @@ local function check_collisions()
             local hit_key = id .. "_bots"
             if last_hit_by[hit_key] ~= attack_id then
                 for bi, bot in ipairs(bots) do
-                    local bx2 = bot.x
-                    local by2 = bot.y
-                    local bw2 = config.SPRITE_SIZE
-                    local bh2 = bot.height
+                    local bx2, by2, bw2, bh2 = Helpers.get_entity_hitbox(bot)
                     local tx, ty, contact_angle = Helpers.get_sword_tip(p)
                     local cx, cy = Helpers.get_player_center(p)
                     if check_line_collision(cx, cy, tx, ty, bx2, by2, bw2, bh2) then
@@ -179,51 +173,27 @@ local function check_local_player_hits()
     local tx, ty, contact_angle = Helpers.get_sword_tip(local_player)
     local cx, cy = Helpers.get_player_center(local_player)
     
-    -- Local player hitting network players
-    for id, p in pairs(network_players) do
-        if id ~= my_id then
-            local bx = p.x
-            local by = p.y
-            local bw = config.SPRITE_SIZE
-            local bh = p.height or config.PLAYER_STAND_HEIGHT
-            
-            if check_line_collision(cx, cy, tx, ty, bx, by, bw, bh) then
-                local attack_id = local_player.attack_id or 0
-                if last_hit_targets[id] ~= attack_id then
-                    last_hit_targets[id] = attack_id
-                    local_player.attack_landed = true
-                    local at = local_player.attack_type or ""
-                    local damage = Helpers.get_attack_damage(at)
-                    Network.send_damage(id, damage, contact_angle, config.KNOCKBACK_FORCE, 0, local_player.air_velocity_x, at)
-                    Renderer.add_damage(p.x, p.y, damage)
+    Helpers.each_target(network_players, my_id, bots, function(key, target, is_bot)
+        local bx, by, bw, bh = Helpers.get_entity_hitbox(target)
+        if check_line_collision(cx, cy, tx, ty, bx, by, bw, bh) then
+            local attack_id = local_player.attack_id or 0
+            if last_hit_targets[key] ~= attack_id then
+                last_hit_targets[key] = attack_id
+                local_player.attack_landed = true
+                local at = local_player.attack_type or ""
+                local damage = Helpers.get_attack_damage(at)
+                if is_bot then
+                    Physics.apply_knockback(target, contact_angle, nil, local_player.air_velocity_x, at)
+                    if not Menu.get_settings().invincible then
+                        Physics.take_damage(target, damage)
+                    end
+                else
+                    Network.send_damage(key, damage, contact_angle, config.KNOCKBACK_FORCE, 0, local_player.air_velocity_x, at)
                 end
+                Renderer.add_damage(target.x, target.y, damage)
             end
         end
-    end
-
-    -- Local player hitting bots
-    for bi, bot in ipairs(bots) do
-        local bx = bot.x
-        local by = bot.y
-        local bw = config.SPRITE_SIZE
-        local bh = bot.height
-        
-                if check_line_collision(cx, cy, tx, ty, bx, by, bw, bh) then
-                    local attack_id = local_player.attack_id or 0
-                    local hit_key = "bot_" .. bi
-                    if last_hit_targets[hit_key] ~= attack_id then
-                        last_hit_targets[hit_key] = attack_id
-                        local_player.attack_landed = true
-                        local at = local_player.attack_type or ""
-                        local damage = Helpers.get_attack_damage(at)
-                        Physics.apply_knockback(bot, contact_angle, nil, local_player.air_velocity_x, at)
-                        if not Menu.get_settings().invincible then
-                            Physics.take_damage(bot, damage)
-                        end
-                        Renderer.add_damage(bot.x, bot.y, damage)
-                    end
-                end
-    end
+    end)
 end
 
 local function check_projectile_collisions()
@@ -413,46 +383,23 @@ local function check_projectile_collisions()
 end
 
 local function check_bullet_hits()
-    -- Local player bullets hitting network players
     for i = #local_player.bullets, 1, -1 do
         local b = local_player.bullets[i]
-        for id, p in pairs(network_players) do
-            if id ~= my_id then
-                local bx = p.x
-                local by = p.y
-                local bw = config.SPRITE_SIZE
-                local bh = p.height or config.PLAYER_STAND_HEIGHT
-                
-                if b.x >= bx and b.x <= bx + bw and b.y >= by and b.y <= by + bh then
-                    local kb_angle = math.atan2(b.dy, b.dx)
-                    Network.send_damage(id, 0, kb_angle, config.NET_KNOCKBACK_FORCE, config.NET_SLOW_DURATION)
-                    Physics.remove_bullet(local_player, i)
-                    break
+        local hit = false
+        Helpers.each_target(network_players, my_id, bots, function(key, target, is_bot)
+            local bx, by, bw, bh = Helpers.get_entity_hitbox(target)
+            if b.x >= bx and b.x <= bx + bw and b.y >= by and b.y <= by + bh then
+                local kb_angle = math.atan2(b.dy, b.dx)
+                Network.send_damage(key, 0, kb_angle, config.NET_KNOCKBACK_FORCE, config.NET_SLOW_DURATION)
+                if is_bot and is_host then
+                    Physics.apply_knockback(target, kb_angle, config.NET_KNOCKBACK_FORCE)
+                    Physics.apply_net_slow(target)
                 end
+                Physics.remove_bullet(local_player, i)
+                hit = true
+                return true
             end
-        end
-    end
-
-    -- Local player bullets hitting bots
-    for i = #local_player.bullets, 1, -1 do
-        local b = local_player.bullets[i]
-        for bi, bot in ipairs(bots) do
-            local bx = bot.x
-            local by = bot.y
-            local bw = config.SPRITE_SIZE
-            local bh = bot.height
-
-                if b.x >= bx and b.x <= bx + bw and b.y >= by and b.y <= by + bh then
-                    local kb_angle = math.atan2(b.dy, b.dx)
-                    Network.send_damage("bot_" .. bi, 0, kb_angle, config.NET_KNOCKBACK_FORCE, config.NET_SLOW_DURATION)
-                    if is_host then
-                        Physics.apply_knockback(bot, kb_angle, config.NET_KNOCKBACK_FORCE)
-                        Physics.apply_net_slow(bot)
-                    end
-                    Physics.remove_bullet(local_player, i)
-                break
-            end
-        end
+        end)
     end
 end
 
@@ -485,43 +432,19 @@ local function check_hook_hits(dt)
         return
     end
 
-    -- Hook hitting network players
-    for id, p in pairs(network_players) do
-        if id ~= my_id then
-            local bx = p.x
-            local by = p.y
-            local bw = config.SPRITE_SIZE
-            local bh = p.height or config.PLAYER_STAND_HEIGHT
-            
-            if h.x >= bx and h.x <= bx + bw and h.y >= by and h.y <= by + bh then
-                local_player.hook.target_id = id
-                local ex, ey = Helpers.get_player_center(p)
-                local_player.hook.x = ex
-                local_player.hook.y = ey
-                local_player.hook.initial_dist = math.sqrt((cx - ex) ^ 2 + (cy - ey) ^ 2)
-                break
-            end
+    -- Hook hitting targets
+    Helpers.each_target(network_players, my_id, bots, function(key, target, is_bot)
+        if local_player.hook.target_id then return true end
+        local bx, by, bw, bh = Helpers.get_entity_hitbox(target)
+        if h.x >= bx and h.x <= bx + bw and h.y >= by and h.y <= by + bh then
+            local_player.hook.target_id = key
+            local ex, ey = Helpers.get_player_center(target)
+            local_player.hook.x = ex
+            local_player.hook.y = ey
+            local_player.hook.initial_dist = math.sqrt((cx - ex) ^ 2 + (cy - ey) ^ 2)
+            return true
         end
-    end
-
-    -- Hook hitting bots
-    if not local_player.hook.target_id then
-        for bi, bot in ipairs(bots) do
-            local bx = bot.x
-            local by = bot.y
-            local bw = config.SPRITE_SIZE
-            local bh = bot.height
-
-            if h.x >= bx and h.x <= bx + bw and h.y >= by and h.y <= by + bh then
-                local_player.hook.target_id = "bot_" .. bi
-                local ex, ey = Helpers.get_player_center(bot)
-                local_player.hook.x = ex
-                local_player.hook.y = ey
-                local_player.hook.initial_dist = math.sqrt((cx - ex) ^ 2 + (cy - ey) ^ 2)
-                break
-            end
-        end
-    end
+    end)
 end
 
 local function check_bot_hook_hits()
@@ -570,11 +493,7 @@ local function check_bot_hook_hits()
 
         for id, p in pairs(network_players) do
             if id ~= my_id then
-                local bx = p.x
-                local by = p.y
-                local bw = config.SPRITE_SIZE
-                local bh = p.height or config.PLAYER_STAND_HEIGHT
-                if h.x >= bx and h.x <= bx + bw and h.y >= by and h.y <= by + bh then
+                if Helpers.point_in_hitbox(h.x, h.y, p) then
                     h.target_id = id
                     local ex, ey = Helpers.get_player_center(p)
                     h.x = ex
@@ -612,32 +531,7 @@ end
 local function encode_bots(bot_list)
     local parts = {}
     for _, b in ipairs(bot_list) do
-        local s = string.format("%d,%d,%d,%d,%d,%s,%d,%d,%d,%.1f",
-            math.floor(b.x), math.floor(b.y),
-            math.floor(b.height),
-            math.floor((b.view_facing or b.facing) * 100),
-            math.floor(b.attack_timer * 100),
-            b.attack_type or "none",
-            b.attack_id or 0,
-            b.health or config.MAX_HEALTH,
-            math.floor((b.slow_timer or 0) * 100),
-            (b.dash_timer or 0) * 100)
-        if #b.bullets > 0 then
-            s = s .. ",b:"
-            for i, bul in ipairs(b.bullets) do
-                if i > 1 then s = s .. "," end
-                s = s .. math.floor(bul.x) .. "," .. math.floor(bul.y)
-            end
-        else
-            s = s .. ",b:"
-        end
-        if b.hook then
-            s = s .. ",k:" .. math.floor(b.hook.x) .. "," .. math.floor(b.hook.y)
-                .. "," .. string.format("%.2f", b.hook.dx) .. "," .. string.format("%.2f", b.hook.dy)
-        else
-            s = s .. ",k:"
-        end
-        table.insert(parts, s)
+        table.insert(parts, Helpers.encode_entity(b))
     end
     return table.concat(parts, "|")
 end
@@ -646,39 +540,9 @@ local function decode_bots(data)
     local result = {}
     if not data or #data == 0 then return result end
     for bd in data:gmatch("([^|]+)") do
-        local x, y, h, f, a, at, aid, hp, pslow, pDash = bd:match(
-            "([^,]+),([^,]+),([^,]+),([^,]+),([^,]+),([^,]+),([^,]+),([^,]+),([^,]+),([^,]+)")
-        if x then
-            local bot = {
-                x = tonumber(x), y = tonumber(y),
-                height = tonumber(h),
-                facing = tonumber(f) / 100,
-                attack_timer = tonumber(a) / 100,
-                attack_type = at ~= "none" and at or nil,
-                attack_id = tonumber(aid) or 0,
-                health = tonumber(hp) or config.MAX_HEALTH,
-                slow_timer = tonumber(pslow) or 0,
-                dash_timer = (tonumber(pDash) or 0) / 100,
-                bullets = {}, hook = nil
-            }
-            local bs = bd:match(",b:(.-),k:")
-            if not bs then bs = bd:match(",b:([^|]*)") end
-            if bs and #bs > 0 then
-                local idx = 1
-                for bx, by in bs:gmatch("([^,]+),([^,]+)") do
-                    bot.bullets[idx] = { x = tonumber(bx), y = tonumber(by) }
-                    idx = idx + 1
-                end
-            end
-            local hs = bd:match(",k:([^|]*)")
-            if hs and #hs > 0 then
-                local hx, hy, hdx, hdy = hs:match("([^,]+),([^,]+),([^,]+),([^,]+)")
-                if hx and hy then
-                    bot.hook = { x = tonumber(hx), y = tonumber(hy),
-                        dx = tonumber(hdx) or 0, dy = tonumber(hdy) or 0 }
-                end
-            end
-            table.insert(result, bot)
+        local entity = Helpers.decode_entity(bd)
+        if entity then
+            table.insert(result, entity)
         end
     end
     return result
