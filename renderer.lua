@@ -2,6 +2,7 @@ local config = require "config"
 
 local Renderer = {}
 local Menu = require "menu"
+local Helpers = require "helpers"
 
 local damage_texts = {}
 
@@ -31,49 +32,20 @@ local function draw_health_bar(x, y, health)
 end
 
 local function draw_sword_attack(x, y, h, angle, timer, attack_type)
+    if not attack_type then return end
+    
+    local fake_player = {
+        x = x, y = y, height = h,
+        attack_timer = timer, attack_type = attack_type,
+        attack_angle = angle, view_facing = angle, facing = angle
+    }
     local cx = x + (config.SPRITE_SIZE / 2)
     local cy = y + (h / 2)
+    local tx, ty = Helpers.get_sword_tip(fake_player)
     
     love.graphics.setColor(1, 0, 0, 0.6)
     love.graphics.setLineWidth(2)
-
-    if attack_type == "stab_left" or attack_type == "stab_right" or attack_type == "stab_up" or attack_type == "stab_down" then
-        local duration = config.STAB_DURATION
-        local progress = (duration - math.abs(timer)) / duration
-        local radius = math.sin(progress * math.pi) * config.STAB_LENGTH
-        local tx = cx + math.cos(angle) * radius
-        local ty = cy + math.sin(angle) * radius
-        love.graphics.line(cx, cy, tx, ty)
-
-    elseif attack_type == "swing_up_left" then
-        local progress = (config.SWING_DURATION - timer) / config.SWING_DURATION
-        local sweep = math.pi - progress * (math.pi / 2)
-        local tx = cx + math.cos(sweep) * config.SWING_LENGTH
-        local ty = cy + math.sin(sweep) * config.SWING_LENGTH
-        love.graphics.line(cx, cy, tx, ty)
-
-    elseif attack_type == "swing_up_right" then
-        local progress = (config.SWING_DURATION - timer) / config.SWING_DURATION
-        local sweep = progress * (math.pi / 2)
-        local tx = cx + math.cos(sweep) * config.SWING_LENGTH
-        local ty = cy + math.sin(sweep) * config.SWING_LENGTH
-        love.graphics.line(cx, cy, tx, ty)
-
-    elseif attack_type == "swing_down_left" then
-        local progress = (config.SWING_DURATION - timer) / config.SWING_DURATION
-        local sweep = math.pi + progress * (math.pi / 2)
-        local tx = cx + math.cos(sweep) * config.SWING_LENGTH
-        local ty = cy + math.sin(sweep) * config.SWING_LENGTH
-        love.graphics.line(cx, cy, tx, ty)
-
-    elseif attack_type == "swing_down_right" then
-        local progress = (config.SWING_DURATION - timer) / config.SWING_DURATION
-        local sweep = -progress * (math.pi / 2)
-        local tx = cx + math.cos(sweep) * config.SWING_LENGTH
-        local ty = cy + math.sin(sweep) * config.SWING_LENGTH
-        love.graphics.line(cx, cy, tx, ty)
-    end
-    
+    love.graphics.line(cx, cy, tx, ty)
     love.graphics.setLineWidth(1)
 end
 
@@ -96,6 +68,30 @@ local function draw_hook(hook, x, y, h)
     love.graphics.rectangle("fill", hook.x - config.HOOK_SIZE / 2, hook.y - config.HOOK_SIZE / 2, config.HOOK_SIZE, config.HOOK_SIZE)
 end
 
+local function draw_entity(x, y, h, color_r, color_g, color_b, name, hp, show_health, timer, facing, attack_type, slow_timer, bullets, hook)
+    draw_player_box(x, y, h, color_r, color_g, color_b)
+    draw_nickname(name, x, y, h)
+    if show_health then
+        draw_health_bar(x, y - 5, hp)
+    end
+
+    if math.abs(timer) > 0 then
+        draw_sword_attack(x, y, h, facing, timer, attack_type)
+    end
+
+    if slow_timer and slow_timer > 0 then
+        love.graphics.setColor(0, 0.5, 1, 0.3)
+        love.graphics.rectangle("fill", x - 1, y - 1, config.SPRITE_SIZE + 2, h + 2)
+    end
+
+    if bullets then
+        draw_bullets(bullets)
+    end
+    if hook then
+        draw_hook(hook, x, y, h)
+    end
+end
+
 local function draw_players(local_player, players, my_id)
     for id, p in pairs(players) do
         local is_me = (id == my_id)
@@ -106,30 +102,12 @@ local function draw_players(local_player, players, my_id)
         local timer = is_me and local_player.attack_timer or (p.attack_timer or 0)
         local hp = is_me and local_player.health or (p.health or config.MAX_HEALTH)
         local at = is_me and local_player.attack_type or (p.attack_type or nil)
+        local slow = is_me and local_player.slow_timer or (p.slow_timer or 0)
 
         if is_me then
-            draw_player_box(px, py, h, 0, 1, 0)
-            draw_nickname("You", px, py, h)
+            draw_entity(px, py, h, 0, 1, 0, "You", hp, true, timer, facing, at, slow, nil, nil)
         else
-            draw_player_box(px, py, h, 1, 0, 0)
-            draw_nickname("Guest " .. id, px, py, h)
-        end
-
-        draw_health_bar(px, py - 5, hp)
-
-        if math.abs(timer) > 0 then
-            draw_sword_attack(px, py, h, facing, timer, at)
-        end
-
-        local slow = is_me and local_player.slow_timer or (p.slow_timer or 0)
-        if slow > 0 then
-            love.graphics.setColor(0, 0.5, 1, 0.3)
-            love.graphics.rectangle("fill", px - 1, py - 1, config.SPRITE_SIZE + 2, h + 2)
-        end
-
-        if not is_me then
-            draw_bullets(p.bullets)
-            draw_hook(p.hook, px, py, h)
+            draw_entity(px, py, h, 1, 0, 0, "Guest " .. id, hp, true, timer, facing, at, slow, p.bullets, p.hook)
         end
     end
 end
@@ -137,23 +115,10 @@ end
 local function draw_bot_players(bots)
     local invincible = Menu.get_settings().invincible
     for i, bot in ipairs(bots) do
-        draw_player_box(bot.x, bot.y, bot.height, 0.5, 0.5, 0.5)
-        draw_nickname("Bot " .. i, bot.x, bot.y, bot.height)
-        if not invincible then
-            draw_health_bar(bot.x, bot.y - 5, bot.health)
-        end
-
-        if math.abs(bot.attack_timer) > 0 then
-            draw_sword_attack(bot.x, bot.y, bot.height, bot.view_facing or bot.facing, bot.attack_timer, bot.attack_type)
-        end
-
-        if bot.slow_timer and bot.slow_timer > 0 then
-            love.graphics.setColor(0, 0.5, 1, 0.3)
-            love.graphics.rectangle("fill", bot.x - 1, bot.y - 1, config.SPRITE_SIZE + 2, bot.height + 2)
-        end
-
-        draw_bullets(bot.bullets)
-        draw_hook(bot.hook, bot.x, bot.y, bot.height)
+        draw_entity(bot.x, bot.y, bot.height, 0.5, 0.5, 0.5, "Bot " .. i,
+            bot.health, not invincible, bot.attack_timer,
+            bot.view_facing or bot.facing, bot.attack_type, bot.slow_timer,
+            bot.bullets, bot.hook)
     end
 end
 

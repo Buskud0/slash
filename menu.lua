@@ -1,3 +1,5 @@
+local Helpers = require "helpers"
+
 local Menu = {}
 Menu.is_open = false
 
@@ -76,11 +78,6 @@ local function get_scale(sw, sh)
     return base / 600
 end
 
-local function get_hitbox(x, y, w, h)
-    local mx, my = love.mouse.getPosition()
-    return mx >= x and mx <= x + w and my >= y and my <= y + h
-end
-
 local function draw_check(x, y, s, checked)
     local sz = 20 * s
     love.graphics.setColor(0.3, 0.3, 0.3)
@@ -102,7 +99,7 @@ local function draw_radio(x, y, s, selected)
 end
 
 local function draw_toggle(x, y, w, h, s, label, checked, grayed)
-    local hovered = not grayed and get_hitbox(x, y, w, h)
+    local hovered = not grayed and Helpers.get_hitbox(x, y, w, h)
     if grayed then
         love.graphics.setColor(0.12, 0.12, 0.12, 0.6)
     else
@@ -119,7 +116,7 @@ local function draw_toggle(x, y, w, h, s, label, checked, grayed)
 end
 
 local function draw_radio_item(x, y, w, h, s, label, selected)
-    local hovered = get_hitbox(x, y, w, h)
+    local hovered = Helpers.get_hitbox(x, y, w, h)
     love.graphics.setColor(hovered and 0.3 or 0.2, hovered and 0.3 or 0.2, hovered and 0.3 or 0.2, 0.8)
     love.graphics.rectangle("fill", x, y, w, h, 4 * s, 4 * s)
     draw_radio(x + 6 * s, y + (h - 20 * s) / 2, s, selected)
@@ -163,7 +160,7 @@ function Menu.mousepressed(mx, my)
         local py = sh / 2 - ph / 2
         for i, item in ipairs(main_items) do
             local iy = py + 60 * s + (i - 1) * 56 * s
-            if get_hitbox(px, iy, pw, 44 * s) then
+            if Helpers.get_hitbox(px, iy, pw, 44 * s) then
                 item.action()
                 return
             end
@@ -207,7 +204,7 @@ function Menu.mousepressed(mx, my)
         ry = ry + label_h * s
         for i, mode in ipairs(movement_modes) do
             local iy = ry + (i - 1) * mode_gap * s
-            if get_hitbox(right_x, iy, right_w * s, mode_h * s) then
+            if Helpers.get_hitbox(right_x, iy, right_w * s, mode_h * s) then
                 bot_settings.movement = mode.key
                 save_settings()
                 return
@@ -215,21 +212,21 @@ function Menu.mousepressed(mx, my)
         end
 
         local inv_y = ry + #movement_modes * mode_gap * s + section_gap * s
-        if get_hitbox(right_x, inv_y, right_w * s, toggle_h * s) then
+        if Helpers.get_hitbox(right_x, inv_y, right_w * s, toggle_h * s) then
             bot_settings.invincible = not bot_settings.invincible
             save_settings()
             return
         end
 
         local jump_y = inv_y + toggle_h * s + section_gap * s
-        if bot_settings.movement == "chase" and get_hitbox(right_x, jump_y, right_w * s, toggle_h * s) then
+        if bot_settings.movement == "chase" and Helpers.get_hitbox(right_x, jump_y, right_w * s, toggle_h * s) then
             bot_settings.allow_jump = not bot_settings.allow_jump
             save_settings()
             return
         end
 
         local dash_y = jump_y + toggle_h * s + section_gap * s
-        if bot_settings.movement == "chase" and get_hitbox(right_x, dash_y, right_w * s, toggle_h * s) then
+        if bot_settings.movement == "chase" and Helpers.get_hitbox(right_x, dash_y, right_w * s, toggle_h * s) then
             bot_settings.allow_dash = not bot_settings.allow_dash
             save_settings()
             return
@@ -238,7 +235,7 @@ function Menu.mousepressed(mx, my)
         local ly = y
 
         ly = ly + label_h * s
-        if get_hitbox(left_x, ly, left_w * s, toggle_h * s) then
+        if Helpers.get_hitbox(left_x, ly, left_w * s, toggle_h * s) then
             toggle_bots_pending = true
             return
         end
@@ -247,7 +244,7 @@ function Menu.mousepressed(mx, my)
         local attack_y = attack_label_y + label_h * s
         for i, item in ipairs(attack_toggles) do
             local iy = attack_y + (i - 1) * toggle_gap * s
-            if bot_settings.movement == "chase" and get_hitbox(left_x, iy, left_w * s, toggle_h * s) then
+            if bot_settings.movement == "chase" and Helpers.get_hitbox(left_x, iy, left_w * s, toggle_h * s) then
                 bot_settings[item.key] = not bot_settings[item.key]
                 save_settings()
                 return
@@ -255,7 +252,7 @@ function Menu.mousepressed(mx, my)
         end
 
         local back_y = py + title_h * s + content_h * s + section_gap * s
-        if get_hitbox(px, back_y, pw_s, back_h * s) then
+        if Helpers.get_hitbox(px, back_y, pw_s, back_h * s) then
             screen = "main"
             return
         end
@@ -327,7 +324,7 @@ function Menu.draw_main(sw, sh, s)
 
     for i, item in ipairs(main_items) do
         local iy = py + 60 * s + (i - 1) * 56 * s
-        local hovered = get_hitbox(px, iy, pw, 44 * s)
+        local hovered = Helpers.get_hitbox(px, iy, pw, 44 * s)
         love.graphics.setColor(hovered and 0.35 or 0.25, hovered and 0.35 or 0.25, hovered and 0.35 or 0.25, 0.9)
         love.graphics.rectangle("fill", px + 10 * s, iy, pw - 20 * s, 44 * s, 6 * s, 6 * s)
         love.graphics.setColor(1, 1, 1)
@@ -420,7 +417,7 @@ function Menu.draw_bots(sw, sh, s)
     end
 
     local back_y = py + title_h * s + content_h * s + section_gap * s
-    local hovered = get_hitbox(px, back_y, pw_s, back_h * s)
+    local hovered = Helpers.get_hitbox(px, back_y, pw_s, back_h * s)
     love.graphics.setColor(hovered and 0.4 or 0.3, hovered and 0.2 or 0.15, hovered and 0.2 or 0.15, 0.9)
     love.graphics.rectangle("fill", px + 10 * s, back_y, pw_s - 20 * s, back_h * s, 6 * s, 6 * s)
     love.graphics.setColor(1, 1, 1)

@@ -1,4 +1,5 @@
 local config = require "config"
+local Helpers = require "helpers"
 
 local Physics = {}
 
@@ -52,12 +53,8 @@ local function update_crouch_height(player, crouch_pressed)
     end
 end
 
-local function get_player_center(player)
-    return player.x + config.SPRITE_SIZE / 2, player.y + player.height / 2
-end
-
 local function angle_from_mouse(player, input)
-    local cx, cy = get_player_center(player)
+    local cx, cy = Helpers.get_player_center(player)
     return math.atan2(input.mouse_y - cy, input.mouse_x - cx)
 end
 
@@ -83,7 +80,7 @@ local function update_attacks(player, dt, input)
         end
 
     elseif input.attackSlash then
-        local cx, cy = get_player_center(player)
+        local cx, cy = Helpers.get_player_center(player)
         local mouse_above = input.mouse_y < cy
         local mouse_left = input.mouse_x < cx
 
@@ -321,7 +318,7 @@ function Physics.update(player, dt, input)
 
     local hook_activated = false
     if input.hook and player.hook_cooldown == 0 and not player.hook then
-        local cx, cy = get_player_center(player)
+        local cx, cy = Helpers.get_player_center(player)
         local dx = input.mouse_x - cx
         local dy = input.mouse_y - cy
         local len = math.sqrt(dx * dx + dy * dy)
@@ -355,7 +352,7 @@ function Physics.update(player, dt, input)
 
     local bullet_fired = false
     if input.shootBullet and player.bullet_cooldown == 0 and not input.attackStab and not input.attackSlash then
-        local cx, cy = get_player_center(player)
+        local cx, cy = Helpers.get_player_center(player)
         local dx = input.mouse_x - cx
         local dy = input.mouse_y - cy
         local len = math.sqrt(dx * dx + dy * dy)

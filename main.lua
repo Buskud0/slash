@@ -8,6 +8,7 @@ local Server = require "server"
 local Chat = require "chat"
 local Bot = require "bot"
 local Menu = require "menu"
+local Helpers = require "helpers"
 
 -- Game orchestration state
 local game_state = "connecting"
@@ -34,56 +35,6 @@ local last_hit_targets = {}
 function love.load()
     love.graphics.setDefaultFilter("nearest", "nearest")
     Network.init()
-end
-
--- Calculates the tip coordinates of a player's sword for collision checking.
-local function get_sword_tip(player)
-    local center_x = player.x + (config.SPRITE_SIZE / 2)
-    local center_y = player.y + (player.height / 2)
-    local timer = player.attack_timer
-    local at = player.attack_type
-    local face = player.view_facing or player.facing
-
-    if at == "stab_left" or at == "stab_right" or at == "stab_up" or at == "stab_down" then
-        local duration = config.STAB_DURATION
-        local progress = (duration - math.abs(timer)) / duration
-        local radius = math.sin(progress * math.pi) * config.STAB_LENGTH
-        local angle = player.attack_angle or face
-        local tip_x = center_x + math.cos(angle) * radius
-        local tip_y = center_y + math.sin(angle) * radius
-        return tip_x, tip_y, angle
-
-    elseif at == "swing_up_left" then
-        local progress = (config.SWING_DURATION - timer) / config.SWING_DURATION
-        local sweep = math.pi - progress * (math.pi / 2)
-        local tip_x = center_x + math.cos(sweep) * config.SWING_LENGTH
-        local tip_y = center_y + math.sin(sweep) * config.SWING_LENGTH
-        return tip_x, tip_y, 3 * math.pi / 4
-
-    elseif at == "swing_up_right" then
-        local progress = (config.SWING_DURATION - timer) / config.SWING_DURATION
-        local sweep = progress * (math.pi / 2)
-        local tip_x = center_x + math.cos(sweep) * config.SWING_LENGTH
-        local tip_y = center_y + math.sin(sweep) * config.SWING_LENGTH
-        return tip_x, tip_y, math.pi / 4
-
-    elseif at == "swing_down_left" then
-        local progress = (config.SWING_DURATION - timer) / config.SWING_DURATION
-        local sweep = math.pi + progress * (math.pi / 2)
-        local tip_x = center_x + math.cos(sweep) * config.SWING_LENGTH
-        local tip_y = center_y + math.sin(sweep) * config.SWING_LENGTH
-        return tip_x, tip_y, -3 * math.pi / 4
-
-    elseif at == "swing_down_right" then
-        local progress = (config.SWING_DURATION - timer) / config.SWING_DURATION
-        local sweep = -progress * (math.pi / 2)
-        local tip_x = center_x + math.cos(sweep) * config.SWING_LENGTH
-        local tip_y = center_y + math.sin(sweep) * config.SWING_LENGTH
-        return tip_x, tip_y, -math.pi / 4
-
-    else
-        return center_x, center_y, player.facing
-    end
 end
 
 local function check_line_collision(cx, cy, tx, ty, bx, by, bw, bh)
@@ -130,9 +81,8 @@ local function check_collisions()
         if id ~= my_id and p.attack_timer and math.abs(p.attack_timer) > 0 then
             local attack_id = p.attack_id or 0
             if last_hit_by[id] ~= attack_id then
-                local tx, ty, contact_angle = get_sword_tip(p)
-                local cx = p.x + (config.SPRITE_SIZE / 2)
-                local cy = p.y + (p.height / 2)
+                local tx, ty, contact_angle = Helpers.get_sword_tip(p)
+                local cx, cy = Helpers.get_player_center(p)
                 
                 if check_line_collision(cx, cy, tx, ty, bx, by, bw, bh) then
                     last_hit_by[id] = attack_id
@@ -153,16 +103,12 @@ local function check_collisions()
                     local by2 = bot.y
                     local bw2 = config.SPRITE_SIZE
                     local bh2 = bot.height
-                    local tx, ty, contact_angle = get_sword_tip(p)
-                    local cx = p.x + (config.SPRITE_SIZE / 2)
-                    local cy = p.y + (p.height / 2)
+                    local tx, ty, contact_angle = Helpers.get_sword_tip(p)
+                    local cx, cy = Helpers.get_player_center(p)
                     if check_line_collision(cx, cy, tx, ty, bx2, by2, bw2, bh2) then
                         last_hit_by[hit_key] = attack_id
                         local at = p.attack_type or ""
-                        local damage = config.SWING_DAMAGE
-                        if at:sub(1, 4) == "stab" then
-                            damage = config.STAB_DAMAGE
-                        end
+                        local damage = Helpers.get_attack_damage(at)
                         Physics.apply_knockback(bot, contact_angle, nil, p.air_velocity_x, at)
                         if not Menu.get_settings().invincible then
                             Physics.take_damage(bot, damage)
@@ -200,19 +146,15 @@ local function check_collisions()
             local attack_id = bot.attack_id or 0
             local hit_key = "bot_" .. bi
             if last_hit_by[hit_key] ~= attack_id then
-                local tx, ty, contact_angle = get_sword_tip(bot)
-                local cx = bot.x + (config.SPRITE_SIZE / 2)
-                local cy = bot.y + (bot.height / 2)
+                local tx, ty, contact_angle = Helpers.get_sword_tip(bot)
+                local cx, cy = Helpers.get_player_center(bot)
 
                 if check_line_collision(cx, cy, tx, ty, bx, by, bw, bh) then
                     last_hit_by[hit_key] = attack_id
                     local at = bot.attack_type or ""
                     Physics.apply_knockback(local_player, contact_angle, nil, bot.air_velocity_x, at)
 
-                    local damage = config.SWING_DAMAGE
-                    if at:sub(1, 4) == "stab" then
-                        damage = config.STAB_DAMAGE
-                    end
+                    local damage = Helpers.get_attack_damage(at)
                     Physics.take_damage(local_player, damage)
                     Renderer.add_damage(local_player.x, local_player.y, damage, {1, 0.3, 0.3})
                 end
@@ -224,9 +166,8 @@ end
 local function check_local_player_hits()
     if local_player.attack_timer == 0 then return end
     
-    local tx, ty, contact_angle = get_sword_tip(local_player)
-    local cx = local_player.x + (config.SPRITE_SIZE / 2)
-    local cy = local_player.y + (local_player.height / 2)
+    local tx, ty, contact_angle = Helpers.get_sword_tip(local_player)
+    local cx, cy = Helpers.get_player_center(local_player)
     
     -- Local player hitting network players
     for id, p in pairs(network_players) do
@@ -242,10 +183,7 @@ local function check_local_player_hits()
                     last_hit_targets[id] = attack_id
                     local_player.attack_landed = true
                     local at = local_player.attack_type or ""
-                    local damage = config.SWING_DAMAGE
-                    if at:sub(1, 4) == "stab" then
-                        damage = config.STAB_DAMAGE
-                    end
+                    local damage = Helpers.get_attack_damage(at)
                     Network.send_damage(id, damage, contact_angle, config.KNOCKBACK_FORCE, 0, local_player.air_velocity_x, at)
                     Renderer.add_damage(p.x, p.y, damage)
                 end
@@ -261,23 +199,20 @@ local function check_local_player_hits()
         local bh = bot.height
         
                 if check_line_collision(cx, cy, tx, ty, bx, by, bw, bh) then
-            local attack_id = local_player.attack_id or 0
-            local hit_key = "bot_" .. bi
-            if last_hit_targets[hit_key] ~= attack_id then
-                last_hit_targets[hit_key] = attack_id
-                local_player.attack_landed = true
-                local at = local_player.attack_type or ""
-                local damage = config.SWING_DAMAGE
-                if at:sub(1, 4) == "stab" then
-                    damage = config.STAB_DAMAGE
-                end
+                    local attack_id = local_player.attack_id or 0
+                    local hit_key = "bot_" .. bi
+                    if last_hit_targets[hit_key] ~= attack_id then
+                        last_hit_targets[hit_key] = attack_id
+                        local_player.attack_landed = true
+                        local at = local_player.attack_type or ""
+                        local damage = Helpers.get_attack_damage(at)
                         Physics.apply_knockback(bot, contact_angle, nil, local_player.air_velocity_x, at)
-                if not Menu.get_settings().invincible then
-                    Physics.take_damage(bot, damage)
+                        if not Menu.get_settings().invincible then
+                            Physics.take_damage(bot, damage)
+                        end
+                        Renderer.add_damage(bot.x, bot.y, damage)
+                    end
                 end
-                Renderer.add_damage(bot.x, bot.y, damage)
-            end
-        end
     end
 end
 
@@ -377,24 +312,21 @@ local function check_projectile_collisions()
 
     local swords = {}
     if local_player.attack_timer ~= 0 then
-        local tx, ty = get_sword_tip(local_player)
-        local cx = local_player.x + (config.SPRITE_SIZE / 2)
-        local cy = local_player.y + (local_player.height / 2)
+        local tx, ty = Helpers.get_sword_tip(local_player)
+        local cx, cy = Helpers.get_player_center(local_player)
         swords[#swords + 1] = { cx = cx, cy = cy, tx = tx, ty = ty, owner = "local" }
     end
     for bi, bot in ipairs(bots) do
         if bot.attack_timer ~= 0 then
-            local tx, ty = get_sword_tip(bot)
-            local cx = bot.x + (config.SPRITE_SIZE / 2)
-            local cy = bot.y + (bot.height / 2)
+            local tx, ty = Helpers.get_sword_tip(bot)
+            local cx, cy = Helpers.get_player_center(bot)
             swords[#swords + 1] = { cx = cx, cy = cy, tx = tx, ty = ty, owner = "bot" }
         end
     end
     for id, p in pairs(network_players) do
         if id ~= my_id and p.attack_timer and math.abs(p.attack_timer) > 0 then
-            local tx, ty = get_sword_tip(p)
-            local cx = p.x + (config.SPRITE_SIZE / 2)
-            local cy = p.y + (p.height / 2)
+            local tx, ty = Helpers.get_sword_tip(p)
+            local cx, cy = Helpers.get_player_center(p)
             swords[#swords + 1] = { cx = cx, cy = cy, tx = tx, ty = ty, owner = "net" }
         end
     end
@@ -518,11 +450,10 @@ local function check_hook_hits(dt)
     if not local_player.hook then return end
     
     local h = local_player.hook
-    local cx = local_player.x + (config.SPRITE_SIZE / 2)
-    local cy = local_player.y + (local_player.height / 2)
+    local cx, cy = Helpers.get_player_center(local_player)
 
     if h.target_id then
-        local is_bot = h.target_id:sub(1, 4) == "bot_"
+        local is_bot = Helpers.is_bot_id(h.target_id)
         local p
         if is_bot then
             local bi = tonumber(h.target_id:sub(5))
@@ -531,8 +462,7 @@ local function check_hook_hits(dt)
             p = network_players[h.target_id]
         end
         if p then
-            local ex = p.x + (config.SPRITE_SIZE / 2)
-            local ey = p.y + (p.height or config.PLAYER_STAND_HEIGHT) / 2
+            local ex, ey = Helpers.get_player_center(p)
             local dist = math.sqrt((cx - ex) ^ 2 + (cy - ey) ^ 2)
             if h.initial_dist == 0 or dist <= h.initial_dist * 0.3 then
                 local_player.hook = nil
@@ -555,10 +485,9 @@ local function check_hook_hits(dt)
             
             if h.x >= bx and h.x <= bx + bw and h.y >= by and h.y <= by + bh then
                 local_player.hook.target_id = id
-                local_player.hook.x = bx + bw / 2
-                local_player.hook.y = by + bh / 2
-                local ex = bx + bw / 2
-                local ey = by + bh / 2
+                local ex, ey = Helpers.get_player_center(p)
+                local_player.hook.x = ex
+                local_player.hook.y = ey
                 local_player.hook.initial_dist = math.sqrt((cx - ex) ^ 2 + (cy - ey) ^ 2)
                 break
             end
@@ -575,10 +504,9 @@ local function check_hook_hits(dt)
 
             if h.x >= bx and h.x <= bx + bw and h.y >= by and h.y <= by + bh then
                 local_player.hook.target_id = "bot_" .. bi
-                local_player.hook.x = bx + bw / 2
-                local_player.hook.y = by + bh / 2
-                local ex = bx + bw / 2
-                local ey = by + bh / 2
+                local ex, ey = Helpers.get_player_center(bot)
+                local_player.hook.x = ex
+                local_player.hook.y = ey
                 local_player.hook.initial_dist = math.sqrt((cx - ex) ^ 2 + (cy - ey) ^ 2)
                 break
             end
@@ -591,8 +519,7 @@ local function check_bot_hook_hits()
         if not bot.hook then goto continue_bot end
 
         local h = bot.hook
-        local bcx = bot.x + (config.SPRITE_SIZE / 2)
-        local bcy = bot.y + (bot.height / 2)
+        local bcx, bcy = Helpers.get_player_center(bot)
 
         if h.target_id then
             local target
@@ -602,8 +529,9 @@ local function check_bot_hook_hits()
                 target = network_players[h.target_id]
             end
             if target then
-                h.x = target.x + (config.SPRITE_SIZE / 2)
-                h.y = target.y + (target.height or config.PLAYER_STAND_HEIGHT) / 2
+                local tx, ty = Helpers.get_player_center(target)
+                h.x = tx
+                h.y = ty
                 local d = math.sqrt((bcx - h.x) ^ 2 + (bcy - h.y) ^ 2)
                 if h.initial_dist == 0 or d <= h.initial_dist * 0.3 then
                     bot.hook = nil
@@ -620,11 +548,12 @@ local function check_bot_hook_hits()
             goto continue_bot
         end
 
-        if math.abs(h.x - (local_player.x + config.SPRITE_SIZE / 2)) < config.SPRITE_SIZE and
-           math.abs(h.y - (local_player.y + local_player.height / 2)) < local_player.height then
+        local lpx, lpy = Helpers.get_player_center(local_player)
+        if math.abs(h.x - lpx) < config.SPRITE_SIZE and
+           math.abs(h.y - lpy) < local_player.height then
             h.target_id = "local"
-            h.x = local_player.x + config.SPRITE_SIZE / 2
-            h.y = local_player.y + local_player.height / 2
+            h.x = lpx
+            h.y = lpy
             h.initial_dist = math.sqrt((bcx - h.x) ^ 2 + (bcy - h.y) ^ 2)
             goto continue_bot
         end
@@ -637,8 +566,9 @@ local function check_bot_hook_hits()
                 local bh = p.height or config.PLAYER_STAND_HEIGHT
                 if h.x >= bx and h.x <= bx + bw and h.y >= by and h.y <= by + bh then
                     h.target_id = id
-                    h.x = bx + bw / 2
-                    h.y = by + bh / 2
+                    local ex, ey = Helpers.get_player_center(p)
+                    h.x = ex
+                    h.y = ey
                     h.initial_dist = math.sqrt((bcx - h.x) ^ 2 + (bcy - h.y) ^ 2)
                     break
                 end
@@ -654,14 +584,16 @@ local function update_hook_tracking()
         local tid = local_player.hook.target_id
         local p = network_players[tid]
         if p then
-            local_player.hook.x = p.x + (config.SPRITE_SIZE / 2)
-            local_player.hook.y = p.y + (p.height or config.PLAYER_STAND_HEIGHT) / 2
-        elseif tid:sub(1, 4) == "bot_" then
+            local hx, hy = Helpers.get_player_center(p)
+            local_player.hook.x = hx
+            local_player.hook.y = hy
+        elseif Helpers.is_bot_id(tid) then
             local bi = tonumber(tid:sub(5))
             local bot = bots[bi]
             if bot then
-                local_player.hook.x = bot.x + (config.SPRITE_SIZE / 2)
-                local_player.hook.y = bot.y + (bot.height / 2)
+                local hx, hy = Helpers.get_player_center(bot)
+                local_player.hook.x = hx
+                local_player.hook.y = hy
             end
         end
     end
@@ -806,7 +738,7 @@ local function run_client(dt)
     end
 
     if pending_damage then
-        if pending_damage.target_id and pending_damage.target_id:sub(1, 4) == "bot_" then
+        if pending_damage.target_id and Helpers.is_bot_id(pending_damage.target_id) then
             if is_host then
                 local bi = tonumber(pending_damage.target_id:sub(5))
                 local bot = bots[bi]
@@ -827,7 +759,7 @@ local function run_client(dt)
     end
 
     if pending_pull then
-        if pending_pull.target_id and pending_pull.target_id:sub(1, 4) == "bot_" then
+        if pending_pull.target_id and Helpers.is_bot_id(pending_pull.target_id) then
             local bi = tonumber(pending_pull.target_id:sub(5))
             local bot = bots[bi]
             if bot and is_host then
