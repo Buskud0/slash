@@ -35,6 +35,7 @@ function Player.new(spawn_x, spawn_y)
     self.bullet_cooldown = 0
     self.hook = nil
     self.hook_cooldown = 0
+    self.combat_cooldown = 0
     self.pull_toward = nil
     return self
 end
@@ -51,6 +52,7 @@ function Player.to_view(self)
         health = self.health,
         slow_timer = self.slow_timer or 0,
         air_velocity_x = self.air_velocity_x or 0,
+        dash_timer = self.dash_timer or 0,
         bullets = self.bullets,
         hook = self.hook
     }

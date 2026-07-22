@@ -62,8 +62,10 @@ local function update_attacks(player, dt, input)
     for name, cd in pairs(player.cooldowns) do
         player.cooldowns[name] = math.max(0, cd - dt)
     end
+    player.combat_cooldown = math.max(0, player.combat_cooldown - dt)
 
     if player.attack_timer ~= 0 then return false end
+    if player.combat_cooldown > 0 then return false end
 
     local at, angle
 
@@ -228,6 +230,7 @@ function Physics.take_damage(player, amount)
     player.hit_gravity_timer = config.HIT_GRAVITY_DURATION
     player.attack_timer = 0
     player.attack_type = nil
+    player.combat_cooldown = config.COMBAT_COOLDOWN
     if player.health <= 0 then
         player.x = config.SPAWN_X
         player.y = config.SPAWN_Y

@@ -65,8 +65,8 @@ local function parse_state(payload)
             local id = player_data:sub(1, id_end - 1)
             local raw = player_data:sub(id_end + 1)
 
-            local px, py, ph, pf, pa, pat, paid, phealth, pslow, pavx = raw:match(
-                "([^,]+),([^,]+),([^,]+),([^,]+),([^,]+),([^,]+),([^,]+),([^,]+),([^,]+),([^,]+)")
+            local px, py, ph, pf, pa, pat, paid, phealth, pslow, pavx, pDash = raw:match(
+                "([^,]+),([^,]+),([^,]+),([^,]+),([^,]+),([^,]+),([^,]+),([^,]+),([^,]+),([^,]+),([^,]+)")
             if px and py and ph and pf and pa and pat and paid and phealth then
                 local view = {
                     x = tonumber(px),
@@ -79,6 +79,7 @@ local function parse_state(payload)
                     health = tonumber(phealth) or config.MAX_HEALTH,
                     slow_timer = tonumber(pslow) or 0,
                     air_velocity_x = (tonumber(pavx) or 0) / 100,
+                    dash_timer = (tonumber(pDash) or 0) / 100,
                     bullets = {},
                     hook = nil
                 }
@@ -125,7 +126,7 @@ function Network.update(local_player)
         local attack_type = local_player.attack_type or "none"
         local slow = math.floor((local_player.slow_timer or 0) * 100)
 
-        local payload = string.format("pos:%d,%d,%d,%d,%d,%s,%d,%d,%d,%d",
+        local payload = string.format("pos:%d,%d,%d,%d,%d,%s,%d,%d,%d,%d,%.1f",
             math.floor(local_player.x),
             math.floor(local_player.y),
             height,
@@ -135,7 +136,8 @@ function Network.update(local_player)
             local_player.attack_id or 0,
             local_player.health or config.MAX_HEALTH,
             slow,
-            math.floor((local_player.air_velocity_x or 0) * 100)
+            math.floor((local_player.air_velocity_x or 0) * 100),
+            (local_player.dash_timer or 0) * 100
         )
 
         local bullets = local_player.bullets or {}

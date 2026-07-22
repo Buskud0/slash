@@ -31,6 +31,16 @@ local last_hit_by = {}
 -- Tracks the last attack_id that hit a specific guest player from the local player
 local last_hit_targets = {}
 
+local is_host = false
+
+local function try_toggle_bots()
+    if is_host then
+        Network.send_toggle_bots()
+    else
+        Chat.add("Only the host can toggle bots")
+    end
+end
+
 -- Love2D Initial Load callback
 function love.load()
     love.graphics.setDefaultFilter("nearest", "nearest")
@@ -602,7 +612,7 @@ end
 local function encode_bots(bot_list)
     local parts = {}
     for _, b in ipairs(bot_list) do
-        local s = string.format("%d,%d,%d,%d,%d,%s,%d,%d,%d",
+        local s = string.format("%d,%d,%d,%d,%d,%s,%d,%d,%d,%.1f",
             math.floor(b.x), math.floor(b.y),
             math.floor(b.height),
             math.floor((b.view_facing or b.facing) * 100),
@@ -610,7 +620,8 @@ local function encode_bots(bot_list)
             b.attack_type or "none",
             b.attack_id or 0,
             b.health or config.MAX_HEALTH,
-            math.floor((b.slow_timer or 0) * 100))
+            math.floor((b.slow_timer or 0) * 100),
+            (b.dash_timer or 0) * 100)
         if #b.bullets > 0 then
             s = s .. ",b:"
             for i, bul in ipairs(b.bullets) do
@@ -635,8 +646,8 @@ local function decode_bots(data)
     local result = {}
     if not data or #data == 0 then return result end
     for bd in data:gmatch("([^|]+)") do
-        local x, y, h, f, a, at, aid, hp, pslow = bd:match(
-            "([^,]+),([^,]+),([^,]+),([^,]+),([^,]+),([^,]+),([^,]+),([^,]+),([^,]+)")
+        local x, y, h, f, a, at, aid, hp, pslow, pDash = bd:match(
+            "([^,]+),([^,]+),([^,]+),([^,]+),([^,]+),([^,]+),([^,]+),([^,]+),([^,]+),([^,]+)")
         if x then
             local bot = {
                 x = tonumber(x), y = tonumber(y),
@@ -647,6 +658,7 @@ local function decode_bots(data)
                 attack_id = tonumber(aid) or 0,
                 health = tonumber(hp) or config.MAX_HEALTH,
                 slow_timer = tonumber(pslow) or 0,
+                dash_timer = (tonumber(pDash) or 0) / 100,
                 bullets = {}, hook = nil
             }
             local bs = bd:match(",b:(.-),k:")
@@ -690,12 +702,12 @@ local function run_client(dt)
     local players, id, lost, pending_damage, pending_pull, pending_bots, pending_toggle = Network.update(Player.to_view(local_player))
     network_players, my_id = players, id
 
-    local is_host = (game_state == "host_and_client")
+    is_host = (game_state == "host_and_client")
 
     Menu.set_bots_enabled(bots_enabled)
 
     if Menu.consume_toggle_bots() then
-        Network.send_toggle_bots()
+        try_toggle_bots()
     end
 
     if pending_toggle then
@@ -845,7 +857,7 @@ function love.keypressed(key)
             return
         end
         if key == "p" and not Chat.is_typing and (game_state == "host_and_client" or game_state == "client_only") then
-            Network.send_toggle_bots()
+            try_toggle_bots()
             return
         end
         local msg = Chat.keypressed(key)
