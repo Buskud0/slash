@@ -20,6 +20,7 @@ local local_player = Player.new()
 -- Bot list
 local bots = {}
 local bots_enabled = false
+local host_invincible = false
 
 -- Network player data
 local network_players = {}
@@ -116,8 +117,8 @@ local function check_collisions()
                         Physics.apply_knockback(bot, contact_angle, nil, p.air_velocity_x, at)
                         if not Menu.get_settings().invincible then
                             Physics.take_damage(bot, damage)
+                            Renderer.add_damage(bot.x, bot.y, damage)
                         end
-                        Renderer.add_damage(bot.x, bot.y, damage)
                         break
                     end
                 end
@@ -186,11 +187,12 @@ local function check_local_player_hits()
                     Physics.apply_knockback(target, contact_angle, nil, local_player.air_velocity_x, at)
                     if not Menu.get_settings().invincible then
                         Physics.take_damage(target, damage)
+                        Renderer.add_damage(target.x, target.y, damage)
                     end
                 else
                     Network.send_damage(key, damage, contact_angle, config.KNOCKBACK_FORCE, 0, local_player.air_velocity_x, at)
+                    Renderer.add_damage(target.x, target.y, damage)
                 end
-                Renderer.add_damage(target.x, target.y, damage)
             end
         end
     end)
@@ -529,23 +531,33 @@ local function update_hook_tracking()
 end
 
 local function encode_bots(bot_list)
+    local settings = Menu.get_settings()
+    local inv = settings.invincible
+    host_invincible = inv
     local parts = {}
     for _, b in ipairs(bot_list) do
         table.insert(parts, Helpers.encode_entity(b))
     end
-    return table.concat(parts, "|")
+    return "i:" .. (inv and "1" or "0") .. "|" .. table.concat(parts, "|")
 end
 
 local function decode_bots(data)
     local result = {}
-    if not data or #data == 0 then return result end
-    for bd in data:gmatch("([^|]+)") do
+    local invincible = false
+    if not data or #data == 0 then return result, invincible end
+    local inv_str, rest = data:match("^i:([01])|(.*)")
+    if inv_str then
+        invincible = inv_str == "1"
+    else
+        rest = data
+    end
+    for bd in rest:gmatch("([^|]+)") do
         local entity = Helpers.decode_entity(bd)
         if entity then
             table.insert(result, entity)
         end
     end
-    return result
+    return result, invincible
 end
 
 -- Client loop processing
@@ -608,7 +620,7 @@ local function run_client(dt)
         Network.send_bots(encode_bots(bots))
     else
         if pending_bots ~= nil then
-            bots = decode_bots(pending_bots)
+            bots, host_invincible = decode_bots(pending_bots)
             Network.pending_bots = nil
         end
     end
@@ -698,6 +710,7 @@ function love.draw()
     if game_state == "connecting" then
         love.graphics.print("Searching for game...", 20, 20)
     else
+        Renderer.set_bot_invincible(host_invincible)
         Renderer.draw(local_player, network_players, my_id, bots)
         Menu.draw()
         Chat.draw()

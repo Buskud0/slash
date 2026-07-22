@@ -1,10 +1,10 @@
 local config = require "config"
 
 local Renderer = {}
-local Menu = require "menu"
 local V = require "visuals"
 
 local damage_texts = {}
+local bot_invincible = false
 
 local function draw_player_box(x, y, h, r, g, b)
     love.graphics.setColor(r, g, b)
@@ -103,7 +103,6 @@ local function update_entity_trail(key, entity)
 end
 
 local function draw_entities(local_player, players, my_id, bots)
-    local invincible = Menu.get_settings().invincible
     local entities = {
         { key = "local", entity = local_player, r = 0, g = 1, b = 0, name = "You", show_health = true, is_local = true }
     }
@@ -113,7 +112,7 @@ local function draw_entities(local_player, players, my_id, bots)
         end
     end
     for i, bot in ipairs(bots) do
-        table.insert(entities, { key = "bot_" .. i, entity = bot, r = 0.5, g = 0.5, b = 0.5, name = "Bot " .. i, show_health = not invincible })
+        table.insert(entities, { key = "bot_" .. i, entity = bot, r = 0.5, g = 0.5, b = 0.5, name = "Bot " .. i, show_health = not bot_invincible })
     end
 
     for _, e in ipairs(entities) do
@@ -161,6 +160,10 @@ function Renderer.update_damage_texts(dt)
             table.remove(damage_texts, i)
         end
     end
+end
+
+function Renderer.set_bot_invincible(val)
+    bot_invincible = val
 end
 
 function Renderer.draw(local_player, players, my_id, bots)
