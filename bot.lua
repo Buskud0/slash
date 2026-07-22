@@ -6,7 +6,7 @@ local function dist(x1, y1, x2, y2)
     return math.sqrt((x2 - x1) ^ 2 + (y2 - y1) ^ 2)
 end
 
-function Bot.get_input(bot, enemies, settings)
+function Bot.get_input(bot, enemies, settings, dt)
     local input = {
         dx = 0, dy = 0,
         jump = false, dash = false, crouch = false,
@@ -93,8 +93,17 @@ function Bot.get_input(bot, enemies, settings)
         end
     end
 
-    if bot.is_on_ground and math.random() < 0.02 then
-        input.jump = true
+    if s.allow_jump then
+        if not bot.jump_hold_timer then bot.jump_hold_timer = 0 end
+        if bot.jump_hold_timer > 0 then
+            if not bot.is_on_ground then
+                input.jump = true
+            end
+            bot.jump_hold_timer = bot.jump_hold_timer - dt
+        elseif bot.is_on_ground and math.random() < 0.01 then
+            bot.jump_hold_timer = config.BOT_JUMP_HOLD_DURATION
+            input.jump = true
+        end
     end
 
     return input

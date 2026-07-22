@@ -43,6 +43,11 @@ return {
     HIT_GRAVITY_DURATION = 0.5,
     HIT_GRAVITY_MULTIPLIER = 0.1,
 
+    -- Bot Constants
+    BOT_SPEED_MULT = 0.5,
+    BOT_COUNT = 1,
+    BOT_JUMP_HOLD_DURATION = 0.18,
+
     -- Net Constants
     NET_SPEED = 300,
     NET_COOLDOWN = 3,
@@ -58,8 +63,4 @@ return {
     HOOK_COOLDOWN = 3,
     HOOK_SIZE = 3,
     HOOK_PULL_FORCE = 300,
-
-    -- Bot Constants
-    BOT_COUNT = 1,
-    BOT_SPEED_MULT = 0.5
 }

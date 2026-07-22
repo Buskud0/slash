@@ -50,6 +50,7 @@ function Player.to_view(self)
         attack_type = self.attack_type,
         health = self.health,
         slow_timer = self.slow_timer or 0,
+        air_velocity_x = self.air_velocity_x or 0,
         bullets = self.bullets,
         hook = self.hook
     }

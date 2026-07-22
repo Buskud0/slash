@@ -185,6 +185,28 @@ function Renderer.add_clash(x, y)
     })
 end
 
+function Renderer.add_hooked(x, y)
+    table.insert(damage_texts, {
+        x = x,
+        y = y,
+        text = "*hooked*",
+        timer = 0.6,
+        max_timer = 0.6,
+        color = {1, 0.4, 0.2}
+    })
+end
+
+function Renderer.add_frozen(x, y)
+    table.insert(damage_texts, {
+        x = x,
+        y = y,
+        text = "*frozen*",
+        timer = 0.6,
+        max_timer = 0.6,
+        color = {0.3, 0.7, 1}
+    })
+end
+
 function Renderer.update_damage_texts(dt)
     for i = #damage_texts, 1, -1 do
         local t = damage_texts[i]
