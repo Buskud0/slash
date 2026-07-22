@@ -163,14 +163,14 @@ local function draw_floor()
     love.graphics.line(0, config.GROUND_Y, screen_width, config.GROUND_Y)
 end
 
-function Renderer.add_damage(x, y, amount)
+function Renderer.add_damage(x, y, amount, color)
     table.insert(damage_texts, {
         x = x + config.SPRITE_SIZE / 2,
         y = y - 5,
         text = "-" .. amount,
         timer = 0.8,
         max_timer = 0.8,
-        color = {1, 1, 1}
+        color = color or {1, 1, 1}
     })
 end
 
@@ -182,28 +182,6 @@ function Renderer.add_clash(x, y)
         timer = 0.6,
         max_timer = 0.6,
         color = {1, 0.85, 0.2}
-    })
-end
-
-function Renderer.add_hooked(x, y)
-    table.insert(damage_texts, {
-        x = x,
-        y = y,
-        text = "*hooked*",
-        timer = 0.6,
-        max_timer = 0.6,
-        color = {1, 0.4, 0.2}
-    })
-end
-
-function Renderer.add_frozen(x, y)
-    table.insert(damage_texts, {
-        x = x,
-        y = y,
-        text = "*frozen*",
-        timer = 0.6,
-        max_timer = 0.6,
-        color = {0.3, 0.7, 1}
     })
 end
 

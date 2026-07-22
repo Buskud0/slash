@@ -93,7 +93,7 @@ function Bot.get_input(bot, enemies, settings, dt)
         end
     end
 
-    if s.allow_jump then
+    if s.allow_jump and s.movement == "chase" then
         if not bot.jump_hold_timer then bot.jump_hold_timer = 0 end
         if bot.jump_hold_timer > 0 then
             if not bot.is_on_ground then
@@ -103,6 +103,16 @@ function Bot.get_input(bot, enemies, settings, dt)
         elseif bot.is_on_ground and math.random() < 0.01 then
             bot.jump_hold_timer = config.BOT_JUMP_HOLD_DURATION
             input.jump = true
+        end
+    end
+
+    if s.allow_dash and s.movement == "chase" then
+        if not bot.next_dash then bot.next_dash = 0 end
+        bot.next_dash = bot.next_dash - dt
+        if bot.next_dash <= 0 and bot.is_on_ground and math.random() < 0.01 then
+            input.dash = true
+            input.dx = (dx > 0 and 1 or -1) * config.BOT_SPEED_MULT
+            bot.next_dash = 1 + math.random()
         end
     end
 

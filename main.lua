@@ -29,7 +29,6 @@ local last_hit_by = {}
 
 -- Tracks the last attack_id that hit a specific guest player from the local player
 local last_hit_targets = {}
-local last_pull_hook_chat = nil
 
 -- Love2D Initial Load callback
 function love.load()
@@ -189,7 +188,6 @@ local function check_collisions()
                 end
                 Physics.apply_knockback(local_player, kb_angle, config.NET_KNOCKBACK_FORCE)
                 Physics.apply_net_slow(local_player)
-                Renderer.add_frozen(local_player.x + config.SPRITE_SIZE / 2, local_player.y)
                 Physics.remove_bullet(bot, i)
                 break
             end
@@ -216,7 +214,7 @@ local function check_collisions()
                         damage = config.STAB_DAMAGE
                     end
                     Physics.take_damage(local_player, damage)
-                    Renderer.add_damage(local_player.x, local_player.y, damage)
+                    Renderer.add_damage(local_player.x, local_player.y, damage, {1, 0.3, 0.3})
                 end
             end
         end
@@ -486,7 +484,6 @@ local function check_bullet_hits()
                 if b.x >= bx and b.x <= bx + bw and b.y >= by and b.y <= by + bh then
                     local kb_angle = math.atan2(b.dy, b.dx)
                     Network.send_damage(id, 0, kb_angle, config.NET_KNOCKBACK_FORCE, config.NET_SLOW_DURATION)
-                    Renderer.add_frozen(p.x + config.SPRITE_SIZE / 2, p.y)
                     Physics.remove_bullet(local_player, i)
                     break
                 end
@@ -510,7 +507,6 @@ local function check_bullet_hits()
                         Physics.apply_knockback(bot, kb_angle, config.NET_KNOCKBACK_FORCE)
                         Physics.apply_net_slow(bot)
                     end
-                    Renderer.add_frozen(bot.x + config.SPRITE_SIZE / 2, bot.y)
                     Physics.remove_bullet(local_player, i)
                 break
             end
@@ -564,7 +560,6 @@ local function check_hook_hits(dt)
                 local ex = bx + bw / 2
                 local ey = by + bh / 2
                 local_player.hook.initial_dist = math.sqrt((cx - ex) ^ 2 + (cy - ey) ^ 2)
-                Renderer.add_hooked(p.x + config.SPRITE_SIZE / 2, p.y)
                 break
             end
         end
@@ -585,7 +580,6 @@ local function check_hook_hits(dt)
                 local ex = bx + bw / 2
                 local ey = by + bh / 2
                 local_player.hook.initial_dist = math.sqrt((cx - ex) ^ 2 + (cy - ey) ^ 2)
-                Renderer.add_hooked(bot.x + config.SPRITE_SIZE / 2, bot.y)
                 break
             end
         end
@@ -632,7 +626,6 @@ local function check_bot_hook_hits()
             h.x = local_player.x + config.SPRITE_SIZE / 2
             h.y = local_player.y + local_player.height / 2
             h.initial_dist = math.sqrt((bcx - h.x) ^ 2 + (bcy - h.y) ^ 2)
-            Renderer.add_hooked(local_player.x + config.SPRITE_SIZE / 2, local_player.y)
             goto continue_bot
         end
 
@@ -824,11 +817,10 @@ local function run_client(dt)
             end
         else
             Physics.take_damage(local_player, pending_damage.amount)
-            Renderer.add_damage(local_player.x, local_player.y, pending_damage.amount)
+            Renderer.add_damage(local_player.x, local_player.y, pending_damage.amount, {1, 0.3, 0.3})
             Physics.apply_knockback(local_player, pending_damage.knockback, pending_damage.force, pending_damage.attacker_vx, pending_damage.attack_type)
             if pending_damage.slow and pending_damage.slow > 0 then
                 Physics.apply_net_slow(local_player, pending_damage.slow)
-                Renderer.add_frozen(local_player.x + config.SPRITE_SIZE / 2, local_player.y)
             end
         end
         Network.pending_damage = nil
@@ -843,14 +835,8 @@ local function run_client(dt)
             end
         else
             Physics.apply_pull(local_player, pending_pull.x, pending_pull.y, pending_pull.dx, pending_pull.dy)
-            if not last_pull_hook_chat then
-                last_pull_hook_chat = true
-                Renderer.add_hooked(local_player.x + config.SPRITE_SIZE / 2, local_player.y)
-            end
         end
         Network.pending_pull = nil
-    else
-        last_pull_hook_chat = nil
     end
 
     check_collisions()

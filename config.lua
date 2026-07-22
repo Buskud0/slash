@@ -13,8 +13,8 @@ return {
     -- Combat Constants
     SWING_DURATION = 0.12,
     STAB_DURATION = 0.15,
-    SWORD_COOLDOWN_HIT = 1,
-    SWORD_COOLDOWN_MISS = 2,
+    SWORD_COOLDOWN_HIT = 0.5, --1
+    SWORD_COOLDOWN_MISS = 1.5, --2
     STAB_LENGTH = 50,
     SWING_LENGTH = 35,
     SWING_DAMAGE = 10,

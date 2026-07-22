@@ -11,6 +11,7 @@ local defaults = {
     allow_net = true,
     allow_hook = true,
     allow_jump = true,
+    allow_dash = false,
     invincible = false,
     movement = "chase",
 }
@@ -38,7 +39,7 @@ local movement_modes = {
     { key = "to_center",   label = "Walk to Center" },
 }
 
-local bool_keys = {"allow_stab", "allow_swing", "allow_net", "allow_hook", "allow_jump", "invincible"}
+local bool_keys = {"allow_stab", "allow_swing", "allow_net", "allow_hook", "allow_jump", "allow_dash", "invincible"}
 
 local function save_settings()
     local lines = {}
@@ -187,7 +188,7 @@ function Menu.mousepressed(mx, my)
         local left_col_h = label_h + #movement_modes * mode_gap
             + section_gap + toggle_h
             + section_gap + label_h + #attack_toggles * toggle_gap
-        local right_col_h = label_h + toggle_h + section_gap + toggle_h
+        local right_col_h = label_h + toggle_h + section_gap + toggle_h + section_gap + toggle_h
         local content_h = math.max(left_col_h, right_col_h)
 
         local raw_h = title_h + content_h + section_gap + back_h + padding
@@ -208,7 +209,6 @@ function Menu.mousepressed(mx, my)
             local iy = ry + (i - 1) * mode_gap * s
             if get_hitbox(right_x, iy, right_w * s, mode_h * s) then
                 bot_settings.movement = mode.key
-                if mode.key ~= "chase" then bot_settings.allow_jump = false end
                 save_settings()
                 return
             end
@@ -224,6 +224,13 @@ function Menu.mousepressed(mx, my)
         local jump_y = inv_y + toggle_h * s + section_gap * s
         if bot_settings.movement == "chase" and get_hitbox(right_x, jump_y, right_w * s, toggle_h * s) then
             bot_settings.allow_jump = not bot_settings.allow_jump
+            save_settings()
+            return
+        end
+
+        local dash_y = jump_y + toggle_h * s + section_gap * s
+        if bot_settings.movement == "chase" and get_hitbox(right_x, dash_y, right_w * s, toggle_h * s) then
+            bot_settings.allow_dash = not bot_settings.allow_dash
             save_settings()
             return
         end
@@ -276,8 +283,8 @@ function Menu.keypressed(key)
         local changed = true
         if key == "1" then toggle_bots_pending = true
         elseif key == "2" then bot_settings.movement = "chase"
-        elseif key == "3" then bot_settings.movement = "stand_still"; bot_settings.allow_jump = false
-        elseif key == "4" then bot_settings.movement = "to_center"; bot_settings.allow_jump = false
+        elseif key == "3" then bot_settings.movement = "stand_still"
+        elseif key == "4" then bot_settings.movement = "to_center"
         elseif key == "5" then bot_settings.invincible = not bot_settings.invincible
         elseif key == "6" and bot_settings.movement == "chase" then bot_settings.allow_jump = not bot_settings.allow_jump
         elseif key == "7" and bot_settings.movement == "chase" then bot_settings.allow_stab = not bot_settings.allow_stab
@@ -349,7 +356,7 @@ function Menu.draw_bots(sw, sh, s)
     local left_col_h = label_h + #movement_modes * mode_gap
         + section_gap + toggle_h
         + section_gap + label_h + #attack_toggles * toggle_gap
-    local right_col_h = label_h + toggle_h + section_gap + toggle_h
+    local right_col_h = label_h + toggle_h + section_gap + toggle_h + section_gap + toggle_h
     local content_h = math.max(left_col_h, right_col_h)
 
     local raw_h = title_h + content_h + section_gap + back_h + padding
@@ -396,6 +403,9 @@ function Menu.draw_bots(sw, sh, s)
 
     local jump_y = inv_y + toggle_h * s + section_gap * s
     draw_toggle(right_x + 10 * s, jump_y, right_w * s, toggle_h * s, s, "Jumping", bot_settings.allow_jump, grayed)
+
+    local dash_y = jump_y + toggle_h * s + section_gap * s
+    draw_toggle(right_x + 10 * s, dash_y, right_w * s, toggle_h * s, s, "Dashing", bot_settings.allow_dash, grayed)
 
     local attack_label_y = ly + toggle_h * s + section_gap * s
     local label_r, label_g, label_b = 0.6, 0.6, 0.6
