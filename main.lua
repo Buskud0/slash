@@ -190,7 +190,7 @@ local function check_local_player_hits()
                         Renderer.add_damage(target.x, target.y, damage)
                     end
                 else
-                    Network.send_damage(key, damage, contact_angle, config.KNOCKBACK_FORCE, 0, local_player.air_velocity_x, at)
+                    Network.send_damage(key, damage, contact_angle, config.BASE_KNOCKBACK, 0, local_player.air_velocity_x, at)
                     Renderer.add_damage(target.x, target.y, damage)
                 end
             end

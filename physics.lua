@@ -214,11 +214,11 @@ local function update_movement_and_dash(player, dt, input)
 end
 
 function Physics.apply_knockback(player, angle, force, attacker_vx, attack_type)
-    force = force or config.KNOCKBACK_FORCE
-    player.knockback_x = math.cos(angle) * force + (attacker_vx or 0) * config.KNOCKBACK_VELOCITY_MULTIPLIER
-    player.y_velocity = math.sin(angle) * force * config.KNOCKBACK_VERTICAL_MULTIPLIER
+    force = force or config.BASE_KNOCKBACK
+    player.knockback_x = math.cos(angle) * force + (attacker_vx or 0) * config.MOVEMENT_KNOCKBACK_MULTIPLIER
+    player.y_velocity = math.sin(angle) * force * config.VERTICAL_KNOCKBACK_SCALE - math.abs(attacker_vx or 0) * config.VERTICAL_KNOCKBACK_SCALE
     if attack_type and (attack_type == "swing_up_left" or attack_type == "swing_up_right") then
-        player.y_velocity = player.y_velocity - config.SWING_LIFT_FORCE
+        player.y_velocity = player.y_velocity - config.SWING_UPWARD_FORCE
     end
     player.is_on_ground = false
     player.pull_toward = nil
