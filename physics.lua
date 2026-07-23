@@ -16,7 +16,7 @@ local function apply_gravity(player, dt, input)
     
     local gravity_accel = config.GRAVITY * gravity_multiplier * dt
     
-    if player.y_velocity < 0 and not input.jump then
+    if player.y_velocity < 0 and (not input.jump or player.hit_gravity_timer > 0) then
         gravity_accel = gravity_accel + config.GRAVITY * config.GRAVITY_JUMP_RELEASE_MULTIPLIER * dt
     end
     

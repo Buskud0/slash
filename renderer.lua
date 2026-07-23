@@ -129,8 +129,7 @@ local function draw_entities(local_player, players, my_id, bots)
     for _, e in ipairs(entities) do
         local ent = e.entity
         local trail = update_entity_trail(e.key, ent, e.r, e.g, e.b)
-        local alpha = e.is_local and 1 or 0.25
-        if #trail > 0 then V.draw_dash_trails(nil, trail, alpha) end
+        if #trail > 0 then V.draw_dash_trails(nil, trail) end
         local move_facing = e.is_local and ent.facing or (ent.facing or 1)
         local attack_facing = e.is_local and (ent.view_facing or ent.facing) or (ent.view_facing or ent.facing or 1)
         local bullets = e.is_local and nil or ent.bullets
