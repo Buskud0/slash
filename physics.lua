@@ -189,7 +189,8 @@ local function update_movement_and_dash(player, dt, input)
         elseif not player.is_on_ground then
             player.air_velocity_x = player.air_velocity_x - player.air_velocity_x * config.AIR_FRICTION * dt
         else
-            player.air_velocity_x = 0
+            player.air_velocity_x = player.air_velocity_x - player.air_velocity_x * config.GROUND_FRICTION * dt
+            if math.abs(player.air_velocity_x) < 1 then player.air_velocity_x = 0 end
         end
 
         player.x = player.x + (player.air_velocity_x + player.knockback_x) * dt
