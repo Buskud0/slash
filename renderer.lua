@@ -64,6 +64,10 @@ local function draw_entity(x, y, h, color_r, color_g, color_b, name, hp, show_he
     end
     love.graphics.rectangle("line", x, y, config.SPRITE_SIZE, h)
 
+    if hook and not hook.target_id then
+        draw_hook(hook, x, y, h)
+    end
+
     draw_player_box(x, y, h, color_r, color_g, color_b)
     V.draw_eyes(x, y, h, move_facing)
     draw_nickname(name, x, y, h)
@@ -83,7 +87,7 @@ local function draw_entity(x, y, h, color_r, color_g, color_b, name, hp, show_he
     if bullets then
         draw_bullets(bullets)
     end
-    if hook then
+    if hook and hook.target_id then
         draw_hook(hook, x, y, h)
     end
     if dash_cooldown and dash_cooldown <= 0 and (dash_timer or 0) <= 0 then
@@ -220,9 +224,14 @@ function Renderer.draw(local_player, players, my_id, bots)
     V.draw_background()
     V.draw_ground()
 
+    if local_player.hook and not local_player.hook.target_id then
+        draw_hook(local_player.hook, local_player.x, local_player.y, local_player.height)
+    end
     draw_entities(local_player, players, my_id, bots)
     draw_bullets(local_player.bullets)
-    draw_hook(local_player.hook, local_player.x, local_player.y, local_player.height)
+    if local_player.hook and local_player.hook.target_id then
+        draw_hook(local_player.hook, local_player.x, local_player.y, local_player.height)
+    end
 
     for _, t in ipairs(damage_texts) do
         local alpha = math.min(1, t.timer / (t.max_timer * 0.3))
