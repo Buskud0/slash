@@ -6,6 +6,30 @@ local V = require "visuals"
 local damage_texts = {}
 local bot_invincible = false
 
+local function normalize_view(ent, meta)
+    local is_local = meta.is_local
+    return {
+        x = ent.x,
+        y = ent.y,
+        h = ent.height,
+        color = { meta.r, meta.g, meta.b },
+        name = meta.name,
+        hp = ent.health,
+        show_health = meta.show_health,
+        timer = ent.attack_timer or 0,
+        move_facing = is_local and ent.facing or (ent.facing or 1),
+        attack_facing = is_local and (ent.view_facing or ent.facing) or (ent.view_facing or ent.facing or 1),
+        attack_type = ent.attack_type,
+        slow_timer = ent.slow_timer or 0,
+        combat_cooldown = ent.combat_cooldown or 0,
+        being_hooked = ent.being_hooked or ent.pull_toward ~= nil,
+        bullets = is_local and nil or ent.bullets,
+        hook = ent.hook,
+        dash_timer = ent.dash_timer or 0,
+        dash_cooldown = is_local and ent.dash_cooldown or nil,
+    }
+end
+
 local function draw_player_box(x, y, h, r, g, b)
     love.graphics.setColor(r, g, b)
     love.graphics.rectangle("fill", x, y, config.SPRITE_SIZE, h)
@@ -24,10 +48,10 @@ local function draw_health_bar(x, y, health)
     local bar_width = config.SPRITE_SIZE
     local bar_height = 2
     local hp_percent = math.max(0, math.min(1, health / config.MAX_HEALTH))
-    
+
     love.graphics.setColor(0.3, 0.1, 0.1, 0.8)
     love.graphics.rectangle("fill", x, y, bar_width, bar_height)
-    
+
     love.graphics.setColor(0.2, 0.9, 0.2, 0.9)
     love.graphics.rectangle("fill", x, y, bar_width * hp_percent, bar_height)
 end
@@ -53,44 +77,41 @@ local function draw_hook(hook, x, y, h)
     love.graphics.rectangle("fill", hook.x - config.HOOK_SIZE / 2, hook.y - config.HOOK_SIZE / 2, config.HOOK_SIZE, config.HOOK_SIZE)
 end
 
-local function draw_entity(x, y, h, color_r, color_g, color_b, name, hp, show_health, timer, move_facing, attack_facing, attack_type, slow_timer, bullets, hook, dash_timer, combat_cooldown, being_hooked, dash_cooldown)
+local function draw_entity(v)
+    local x, y, h = v.x, v.y, v.h
+    local r, g, b = v.color[1], v.color[2], v.color[3]
+
     V.draw_shadow(x, y, h)
 
-    local outline_red = (slow_timer and slow_timer > 0) or (combat_cooldown and combat_cooldown > 0) or being_hooked
-    if outline_red then
+    local frozen = v.slow_timer > 0
+    local hooked = v.being_hooked
+    local locked = v.combat_cooldown > 0 and not hooked
+    if frozen then
+        love.graphics.setColor(0, 0.5, 1, 0.9)
+    elseif hooked then
+        love.graphics.setColor(1, 0.85, 0, 0.9)
+    elseif locked then
         love.graphics.setColor(1, 0.15, 0.15, 0.9)
     else
         love.graphics.setColor(0, 0, 0, 0.5)
     end
     love.graphics.rectangle("line", x, y, config.SPRITE_SIZE, h)
 
-    if hook and not hook.target_id then
-        draw_hook(hook, x, y, h)
+    draw_player_box(x, y, h, r, g, b)
+    V.draw_eyes(x, y, h, v.move_facing)
+    draw_nickname(v.name, x, y, h)
+    if v.show_health then
+        draw_health_bar(x, y - 5, v.hp)
     end
 
-    draw_player_box(x, y, h, color_r, color_g, color_b)
-    V.draw_eyes(x, y, h, move_facing)
-    draw_nickname(name, x, y, h)
-    if show_health then
-        draw_health_bar(x, y - 5, hp)
+    if math.abs(v.timer) > 0 then
+        V.draw_sword_arc(x, y, h, v.attack_type, v.timer, v.attack_facing)
     end
 
-    if math.abs(timer) > 0 then
-        V.draw_sword_arc(x, y, h, attack_type, timer, attack_facing)
+    if v.bullets then
+        draw_bullets(v.bullets)
     end
-
-    if slow_timer and slow_timer > 0 then
-        love.graphics.setColor(0, 0.5, 1, 0.3)
-        love.graphics.rectangle("fill", x - 1, y - 1, config.SPRITE_SIZE + 2, h + 2)
-    end
-
-    if bullets then
-        draw_bullets(bullets)
-    end
-    if hook and hook.target_id then
-        draw_hook(hook, x, y, h)
-    end
-    if dash_cooldown and dash_cooldown <= 0 and (dash_timer or 0) <= 0 then
+    if v.dash_cooldown and v.dash_cooldown <= 0 and v.dash_timer <= 0 then
         V.draw_dash_ready_sparkle(x, y, h)
     end
 end
@@ -124,27 +145,39 @@ local function draw_entities(local_player, players, my_id, bots)
     }
     for id, p in pairs(players) do
         if id ~= my_id then
-            table.insert(entities, { key = id, entity = p, r = 1, g = 0, b = 0, name = "Guest " .. id, show_health = true })
+            table.insert(entities, { key = id, entity = p, r = 1, g = 0.6, b = 0, name = "Guest " .. id, show_health = true })
         end
     end
     for i, bot in ipairs(bots) do
         table.insert(entities, { key = "bot_" .. i, entity = bot, r = 0.5, g = 0.5, b = 0.5, name = "Bot " .. i, show_health = not bot_invincible })
     end
 
+    local views = {}
+    local attached_hooks = {}
+    local unattached_hooks = {}
+
     for _, e in ipairs(entities) do
-        local ent = e.entity
-        local trail = update_entity_trail(e.key, ent, e.r, e.g, e.b)
+        local v = normalize_view(e.entity, e)
+        local trail = update_entity_trail(e.key, e.entity, e.r, e.g, e.b)
         if #trail > 0 then V.draw_dash_trails(nil, trail) end
-        local move_facing = e.is_local and ent.facing or (ent.facing or 1)
-        local attack_facing = e.is_local and (ent.view_facing or ent.facing) or (ent.view_facing or ent.facing or 1)
-        local bullets = e.is_local and nil or ent.bullets
-        local hook = e.is_local and nil or ent.hook
-        local dcd = e.is_local and ent.dash_cooldown or nil
-        draw_entity(ent.x, ent.y, ent.height, e.r, e.g, e.b, e.name,
-            ent.health, e.show_health, ent.attack_timer, move_facing, attack_facing,
-            ent.attack_type, ent.slow_timer, bullets, hook, ent.dash_timer or 0,
-            ent.combat_cooldown or 0, ent.being_hooked or false, dcd)
+        table.insert(views, v)
+        if v.hook then
+            if v.hook.target_id then
+                table.insert(attached_hooks, v)
+            else
+                table.insert(unattached_hooks, v)
+            end
+        end
     end
+
+    for _, v in ipairs(unattached_hooks) do
+        draw_hook(v.hook, v.x, v.y, v.h)
+    end
+    for _, v in ipairs(views) do
+        draw_entity(v)
+    end
+
+    return attached_hooks
 end
 
 function Renderer.set_bot_invincible(val)
@@ -224,13 +257,10 @@ function Renderer.draw(local_player, players, my_id, bots)
     V.draw_background()
     V.draw_ground()
 
-    if local_player.hook and not local_player.hook.target_id then
-        draw_hook(local_player.hook, local_player.x, local_player.y, local_player.height)
-    end
-    draw_entities(local_player, players, my_id, bots)
+    local attached_hooks = draw_entities(local_player, players, my_id, bots)
     draw_bullets(local_player.bullets)
-    if local_player.hook and local_player.hook.target_id then
-        draw_hook(local_player.hook, local_player.x, local_player.y, local_player.height)
+    for _, v in ipairs(attached_hooks) do
+        draw_hook(v.hook, v.x, v.y, v.h)
     end
 
     for _, t in ipairs(damage_texts) do
@@ -241,7 +271,7 @@ function Renderer.draw(local_player, players, my_id, bots)
         local tw = font:getWidth(t.text) * 0.35
         love.graphics.print(t.text, t.x - tw / 2, t.y, 0, 0.35, 0.35)
     end
-    
+
     love.graphics.pop()
 
     Renderer.draw_cooldowns(local_player)

@@ -101,8 +101,10 @@ function Helpers.encode_entity(entity)
     end
     local hook = entity.hook
     if hook then
+        local has_target = hook.target_id and 1 or 0
         s = s .. ",k:" .. math.floor(hook.x) .. "," .. math.floor(hook.y)
             .. "," .. string.format("%.2f", hook.dx) .. "," .. string.format("%.2f", hook.dy)
+            .. "," .. has_target
     else
         s = s .. ",k:"
     end
@@ -139,10 +141,14 @@ function Helpers.decode_entity(raw)
     end
     local hook_str = raw:match(",k:([^|]*)")
     if hook_str and #hook_str > 0 then
-        local hx, hy, hdx, hdy = hook_str:match("([^,]+),([^,]+),([^,]+),([^,]+)")
+        local hx, hy, hdx, hdy, htarget = hook_str:match("([^,]+),([^,]+),([^,]+),([^,]+),?(.*)")
         if hx and hy then
-            entity.hook = { x = tonumber(hx), y = tonumber(hy),
+            local hook = { x = tonumber(hx), y = tonumber(hy),
                 dx = tonumber(hdx) or 0, dy = tonumber(hdy) or 0 }
+            if htarget and #htarget > 0 and tonumber(htarget) == 1 then
+                hook.target_id = true
+            end
+            entity.hook = hook
         end
     end
     return entity
