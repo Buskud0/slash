@@ -52,8 +52,16 @@ local function draw_hook(hook, x, y, h)
     love.graphics.rectangle("fill", hook.x - config.HOOK_SIZE / 2, hook.y - config.HOOK_SIZE / 2, config.HOOK_SIZE, config.HOOK_SIZE)
 end
 
-local function draw_entity(x, y, h, color_r, color_g, color_b, name, hp, show_health, timer, move_facing, attack_facing, attack_type, slow_timer, bullets, hook, dash_timer)
+local function draw_entity(x, y, h, color_r, color_g, color_b, name, hp, show_health, timer, move_facing, attack_facing, attack_type, slow_timer, bullets, hook, dash_timer, combat_cooldown, being_hooked, dash_cooldown)
     V.draw_shadow(x, y, h)
+
+    local outline_red = (slow_timer and slow_timer > 0) or (combat_cooldown and combat_cooldown > 0) or being_hooked
+    if outline_red then
+        love.graphics.setColor(1, 0.15, 0.15, 0.9)
+    else
+        love.graphics.setColor(0, 0, 0, 0.5)
+    end
+    love.graphics.rectangle("line", x, y, config.SPRITE_SIZE, h)
 
     draw_player_box(x, y, h, color_r, color_g, color_b)
     V.draw_eyes(x, y, h, move_facing)
@@ -77,10 +85,13 @@ local function draw_entity(x, y, h, color_r, color_g, color_b, name, hp, show_he
     if hook then
         draw_hook(hook, x, y, h)
     end
+    if dash_cooldown and dash_cooldown <= 0 and (dash_timer or 0) <= 0 then
+        V.draw_dash_ready_sparkle(x, y, h)
+    end
 end
 
 local all_trails = {}
-local function update_entity_trail(key, entity)
+local function update_entity_trail(key, entity, r, g, b)
     local dt = love.timer.getDelta()
     local trail = all_trails[key]
     if not trail then
@@ -88,7 +99,7 @@ local function update_entity_trail(key, entity)
         all_trails[key] = trail
     end
     if entity.dash_timer and entity.dash_timer > 0 then
-        table.insert(trail, 1, {x = entity.x, y = entity.y, h = entity.height, age = 0})
+        table.insert(trail, 1, {x = entity.x, y = entity.y, h = entity.height, age = 0, r = r, g = g, b = b})
         while #trail > config.VISUALS.DASH_TRAIL_COUNT do
             table.remove(trail)
         end
@@ -117,19 +128,27 @@ local function draw_entities(local_player, players, my_id, bots)
 
     for _, e in ipairs(entities) do
         local ent = e.entity
-        local trail = update_entity_trail(e.key, ent)
-        if #trail > 0 then V.draw_dash_trails(nil, trail) end
+        local trail = update_entity_trail(e.key, ent, e.r, e.g, e.b)
+        local alpha = e.is_local and 1 or 0.25
+        if #trail > 0 then V.draw_dash_trails(nil, trail, alpha) end
         local move_facing = e.is_local and ent.facing or (ent.facing or 1)
         local attack_facing = e.is_local and (ent.view_facing or ent.facing) or (ent.view_facing or ent.facing or 1)
         local bullets = e.is_local and nil or ent.bullets
         local hook = e.is_local and nil or ent.hook
+        local dcd = e.is_local and ent.dash_cooldown or nil
         draw_entity(ent.x, ent.y, ent.height, e.r, e.g, e.b, e.name,
             ent.health, e.show_health, ent.attack_timer, move_facing, attack_facing,
-            ent.attack_type, ent.slow_timer, bullets, hook, ent.dash_timer or 0)
+            ent.attack_type, ent.slow_timer, bullets, hook, ent.dash_timer or 0,
+            ent.combat_cooldown or 0, ent.being_hooked or false, dcd)
     end
 end
 
+function Renderer.set_bot_invincible(val)
+    bot_invincible = val
+end
+
 function Renderer.add_damage(x, y, amount, color)
+    if amount <= 0 then return end
     table.insert(damage_texts, {
         x = x + config.SPRITE_SIZE / 2,
         y = y - 5,
@@ -162,8 +181,36 @@ function Renderer.update_damage_texts(dt)
     end
 end
 
-function Renderer.set_bot_invincible(val)
-    bot_invincible = val
+function Renderer.draw_cooldowns(local_player)
+    local sw, sh = love.graphics.getDimensions()
+    local scale = math.min(sw, sh) / 240
+    local radius = 8 * scale
+    local gap = 10 * scale
+    local padding = 10 * scale
+
+    local hook_cd = { name = "Hook", timer = local_player.hook_cooldown, max = config.HOOK_COOLDOWN, color = {0.8, 0.8, 0.2} }
+    local freeze_cd = { name = "Freeze", timer = local_player.bullet_cooldown, max = config.NET_COOLDOWN, color = {0.3, 0.7, 0.9} }
+
+    local cy = sh - padding - radius
+
+    love.graphics.origin()
+
+    local font_size = 0.5 * scale
+
+    local function draw_cd(cd, cx)
+        local pct = 1 - math.max(0, math.min(1, cd.timer / cd.max))
+        love.graphics.setColor(0.15, 0.15, 0.2, 0.8)
+        love.graphics.circle("fill", cx, cy, radius)
+        love.graphics.setColor(cd.color[1], cd.color[2], cd.color[3], 0.9)
+        love.graphics.arc("fill", cx, cy, radius, -math.pi / 2, -math.pi / 2 + pct * math.pi * 2)
+        love.graphics.setColor(1, 1, 1, 0.8)
+        love.graphics.print(cd.name, cx, cy - radius - 3 * scale, 0, font_size, font_size, love.graphics.getFont():getWidth(cd.name) * font_size / 2, 0)
+    end
+
+    local pair_w = radius * 4 + gap
+    local pair_x = (sw - pair_w) / 2 + radius
+    draw_cd(freeze_cd, pair_x)
+    draw_cd(hook_cd, pair_x + radius * 2 + gap)
 end
 
 function Renderer.draw(local_player, players, my_id, bots)
@@ -187,6 +234,8 @@ function Renderer.draw(local_player, players, my_id, bots)
     end
     
     love.graphics.pop()
+
+    Renderer.draw_cooldowns(local_player)
 end
 
 return Renderer

@@ -51,6 +51,8 @@ function Player.to_view(self)
         attack_type = self.attack_type,
         health = self.health,
         slow_timer = self.slow_timer or 0,
+        combat_cooldown = self.combat_cooldown or 0,
+        being_hooked = self.pull_toward ~= nil,
         air_velocity_x = self.air_velocity_x or 0,
         dash_timer = self.dash_timer or 0,
         bullets = self.bullets,

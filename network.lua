@@ -78,7 +78,6 @@ function Network.update(local_player)
 
     if Network.server and Network.my_id and local_player then
         local payload = "pos:" .. Helpers.encode_entity(local_player)
-
         Network.server:send(payload, 0, "unreliable")
     end
 

@@ -137,14 +137,30 @@ function V.draw_hook_chain(x1, y1, x2, y2)
     end
 end
 
-function V.draw_dash_trails(player, trail_positions)
+function V.draw_dash_ready_sparkle(x, y, h)
+    local time = love.timer.getTime()
+    local cx = x + config.SPRITE_SIZE / 2
+    local cy = y + h - 2
+    for i = 1, 4 do
+        local phase = time * 4 + i * 1.3
+        local sx = cx + math.sin(phase) * 5
+        local sy = cy + math.cos(phase * 1.5) * 3
+        local brightness = (math.sin(phase * 3) + 1) / 2
+        local alpha = 0.5 + brightness * 0.5
+        local size = 0.5 + brightness * 0.8
+        love.graphics.setColor(1, 1, 1, alpha)
+        love.graphics.rectangle("fill", sx - size / 2, sy - size / 2, size, size)
+    end
+end
+
+function V.draw_dash_trails(player, trail_positions, alpha_mult)
     if not trail_positions or #trail_positions == 0 then return end
-    local dc = VCfg.DASH_TRAIL_COLOR
+    local mult = alpha_mult or 1
     for _, pos in ipairs(trail_positions) do
         local age_ratio = pos.age / VCfg.DASH_TRAIL_LIFETIME
-        local alpha = VCfg.DASH_TRAIL_BASE_ALPHA * (1 - age_ratio)
+        local alpha = VCfg.DASH_TRAIL_BASE_ALPHA * (1 - age_ratio) * mult
         if alpha > 0 then
-            love.graphics.setColor(dc[1], dc[2], dc[3], alpha)
+            love.graphics.setColor(pos.r or 1, pos.g or 1, pos.b or 1, alpha)
             love.graphics.rectangle("fill", pos.x, pos.y, config.SPRITE_SIZE, pos.h or config.PLAYER_STAND_HEIGHT)
         end
     end

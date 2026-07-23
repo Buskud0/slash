@@ -6,11 +6,7 @@ local Physics = {}
 local function apply_gravity(player, dt, input)
     local gravity_multiplier = 1.0
     
-    if math.abs(player.knockback_x) > 50 then
-        gravity_multiplier = gravity_multiplier * config.GRAVITY_HIT_REDUCTION
-    end
-    
-    if player.hit_gravity_timer > 0 and math.abs(player.knockback_x) > 50 then
+    if player.hit_gravity_timer > 0 then
         gravity_multiplier = gravity_multiplier * config.HIT_GRAVITY_MULTIPLIER
     end
     
@@ -147,6 +143,7 @@ local function update_movement_and_dash(player, dt, input)
 
     if player.pull_toward then
         player.pull_toward.timer = player.pull_toward.timer - dt
+        player.combat_cooldown = 1
         if player.pull_toward.timer <= 0 then
             player.knockback_x = -player.pull_toward.dx * config.HOOK_PULL_FORCE
             player.y_velocity = -player.pull_toward.dy * config.HOOK_PULL_FORCE
@@ -166,6 +163,7 @@ local function update_movement_and_dash(player, dt, input)
             player.x = player.x + (dx / len) * speed * dt
             player.y = player.y + (dy / len) * speed * dt
         end
+        player.combat_cooldown = 1
         player.y_velocity = 0
         player.knockback_x = 0
         player.is_on_ground = false
@@ -218,11 +216,12 @@ end
 function Physics.apply_knockback(player, angle, force, attacker_vx, attack_type)
     force = force or config.KNOCKBACK_FORCE
     player.knockback_x = math.cos(angle) * force + (attacker_vx or 0) * config.KNOCKBACK_VELOCITY_MULTIPLIER
-    player.y_velocity = math.sin(angle) * force
+    player.y_velocity = math.sin(angle) * force * config.KNOCKBACK_VERTICAL_MULTIPLIER
     if attack_type and (attack_type == "swing_up_left" or attack_type == "swing_up_right") then
         player.y_velocity = player.y_velocity - config.SWING_LIFT_FORCE
     end
     player.is_on_ground = false
+    player.pull_toward = nil
 end
 
 function Physics.take_damage(player, amount)
@@ -320,7 +319,7 @@ function Physics.update(player, dt, input)
     local attack_started = update_attacks(player, dt, input)
 
     local hook_activated = false
-    if input.hook and player.hook_cooldown == 0 and not player.hook then
+    if input.hook and player.hook_cooldown == 0 and not player.hook and player.combat_cooldown <= 0 then
         local cx, cy = Helpers.get_player_center(player)
         local dx = input.mouse_x - cx
         local dy = input.mouse_y - cy
@@ -354,7 +353,7 @@ function Physics.update(player, dt, input)
     end
 
     local bullet_fired = false
-    if input.shootBullet and player.bullet_cooldown == 0 and not input.attackStab and not input.attackSlash then
+    if input.shootBullet and player.bullet_cooldown == 0 and not input.attackStab and not input.attackSlash and player.combat_cooldown <= 0 then
         local cx, cy = Helpers.get_player_center(player)
         local dx = input.mouse_x - cx
         local dy = input.mouse_y - cy
