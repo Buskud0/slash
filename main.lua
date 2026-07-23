@@ -137,7 +137,7 @@ local function check_collisions()
                 else
                     kb_angle = math.atan2(b.y - (by + bh / 2), b.x - (bx + bw / 2))
                 end
-                Physics.apply_knockback(local_player, kb_angle, config.NET_KNOCKBACK_FORCE)
+                Physics.apply_knockback(local_player, kb_angle, config.FREEZE_BOLT_KNOCKBACK_FORCE)
                 Physics.apply_net_slow(local_player)
                 Physics.remove_bullet(bot, i)
                 break
@@ -200,7 +200,7 @@ end
 
 local function check_projectile_collisions()
     local half_hook = config.HOOK_SIZE / 2
-    local half_net = config.NET_SIZE / 2
+    local half_net = config.FREEZE_BOLT_SIZE / 2
 
     local hooks = {}
     if local_player.hook then
@@ -282,7 +282,7 @@ local function check_projectile_collisions()
             for bj = bi + 1, #bullets do
                 if not removed_bullets[bj] then
                     local a, b = bullets[bi].b, bullets[bj].b
-                    if math.abs(a.x - b.x) < config.NET_SIZE and math.abs(a.y - b.y) < config.NET_SIZE then
+                    if math.abs(a.x - b.x) < config.FREEZE_BOLT_SIZE and math.abs(a.y - b.y) < config.FREEZE_BOLT_SIZE then
                         Renderer.add_clash((a.x + b.x) / 2, (a.y + b.y) / 2)
                         removed_bullets[bi] = true
                         removed_bullets[bj] = true
@@ -327,7 +327,7 @@ local function check_projectile_collisions()
         for bi = 1, #bullets do
             if not removed_bullets[bi] and bullets[bi].owner ~= sw.owner then
                 local bb = bullets[bi].b
-                if check_line_collision(sw.cx, sw.cy, sw.tx, sw.ty, bb.x - half_net, bb.y - half_net, config.NET_SIZE, config.NET_SIZE) then
+                if check_line_collision(sw.cx, sw.cy, sw.tx, sw.ty, bb.x - half_net, bb.y - half_net, config.FREEZE_BOLT_SIZE, config.FREEZE_BOLT_SIZE) then
                     Renderer.add_clash((sw.tx + bb.x) / 2, (sw.ty + bb.y) / 2)
                     removed_bullets[bi] = true
                 end
@@ -392,9 +392,9 @@ local function check_bullet_hits()
             local bx, by, bw, bh = Helpers.get_entity_hitbox(target)
             if b.x >= bx and b.x <= bx + bw and b.y >= by and b.y <= by + bh then
                 local kb_angle = math.atan2(b.dy, b.dx)
-                Network.send_damage(key, 0, kb_angle, config.NET_KNOCKBACK_FORCE, config.NET_SLOW_DURATION)
+                Network.send_damage(key, 0, kb_angle, config.FREEZE_BOLT_KNOCKBACK_FORCE, config.FREEZE_BOLT_SLOW_DURATION)
                 if is_bot and is_host then
-                    Physics.apply_knockback(target, kb_angle, config.NET_KNOCKBACK_FORCE)
+                    Physics.apply_knockback(target, kb_angle, config.FREEZE_BOLT_KNOCKBACK_FORCE)
                     Physics.apply_net_slow(target)
                 end
                 Physics.remove_bullet(local_player, i)

@@ -14,9 +14,10 @@ end
 local function draw_nickname(name, x, y, h)
     love.graphics.setColor(1, 1, 1)
     local font = love.graphics.getFont()
-    local text_w = font:getWidth(name) * 0.25
+    local scale = 0.35
+    local text_w = font:getWidth(name) * scale
     local text_x = x + (config.SPRITE_SIZE / 2) - (text_w / 2)
-    love.graphics.print(name, text_x, y + h + 1, 0, 0.25, 0.25)
+    love.graphics.print(name, text_x, y + h + 1, 0, scale, scale)
 end
 
 local function draw_health_bar(x, y, health)
@@ -36,7 +37,7 @@ local function draw_bullets(bullets)
     for _, b in ipairs(bullets) do
         V.draw_bullet_glow(b.x, b.y)
         love.graphics.setColor(0, 0.8, 0.9)
-        love.graphics.rectangle("fill", b.x - config.NET_SIZE / 2, b.y - config.NET_SIZE / 2, config.NET_SIZE, config.NET_SIZE)
+        love.graphics.rectangle("fill", b.x - config.FREEZE_BOLT_SIZE / 2, b.y - config.FREEZE_BOLT_SIZE / 2, config.FREEZE_BOLT_SIZE, config.FREEZE_BOLT_SIZE)
     end
 end
 
@@ -188,7 +189,7 @@ function Renderer.draw_cooldowns(local_player)
     local padding = 10 * scale
 
     local hook_cd = { name = "Hook", timer = local_player.hook_cooldown, max = config.HOOK_COOLDOWN, color = {0.8, 0.8, 0.2} }
-    local freeze_cd = { name = "Freeze", timer = local_player.bullet_cooldown, max = config.NET_COOLDOWN, color = {0.3, 0.7, 0.9} }
+    local freeze_cd = { name = "Freeze", timer = local_player.bullet_cooldown, max = config.FREEZE_BOLT_COOLDOWN, color = {0.3, 0.7, 0.9} }
 
     local cy = sh - padding - radius
 
@@ -203,7 +204,7 @@ function Renderer.draw_cooldowns(local_player)
         love.graphics.setColor(cd.color[1], cd.color[2], cd.color[3], 0.9)
         love.graphics.arc("fill", cx, cy, radius, -math.pi / 2, -math.pi / 2 + pct * math.pi * 2)
         love.graphics.setColor(1, 1, 1, 0.8)
-        love.graphics.print(cd.name, cx, cy - radius - 3 * scale, 0, font_size, font_size, love.graphics.getFont():getWidth(cd.name) * font_size / 2, 0)
+        love.graphics.print(cd.name, cx, cy + radius + 1 * scale, 0, font_size, font_size, love.graphics.getFont():getWidth(cd.name) / 2, 0)
     end
 
     local pair_w = radius * 4 + gap

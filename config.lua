@@ -49,14 +49,14 @@ return {
     BOT_COUNT = 1,
     BOT_JUMP_HOLD_DURATION = 0.18,
 
-    -- Net Constants
-    NET_SPEED = 300,
-    NET_COOLDOWN = 3,
-    NET_LIFETIME = 1.5,
-    NET_SIZE = 5,
-    NET_KNOCKBACK_FORCE = 200,
-    NET_SLOW_DURATION = 0.5,
-    NET_SLOW_MULTIPLIER = 0.2,
+    -- Freeze Bolt Constants
+    FREEZE_BOLT_SPEED = 300,
+    FREEZE_BOLT_COOLDOWN = 3,
+    FREEZE_BOLT_LIFETIME = 1.5,
+    FREEZE_BOLT_SIZE = 4,
+    FREEZE_BOLT_KNOCKBACK_FORCE = 200,
+    FREEZE_BOLT_SLOW_DURATION = 0.5,
+    FREEZE_BOLT_SLOW_MULTIPLIER = 0.2,
 
     -- Hook Constants
     HOOK_SPEED = 300,
@@ -82,9 +82,9 @@ return {
         SWORD_TIP_COLOR = {1, 0.6, 0.5, 0.9},
         SWORD_STAB_COLOR = {1, 0.5, 0.4, 0.8},
         BULLET_GLOW_COLOR = {0, 0.8, 0.9, 0.15},
-        BULLET_GLOW_RADIUS = 8,
+        BULLET_GLOW_RADIUS = 4,
         HOOK_CHAIN_SPACING = 6,
-        HOOK_CHAIN_SIZE = 1.5,
+        HOOK_CHAIN_SIZE = 2,
         HOOK_CHAIN_COLOR = {0.6, 0.6, 0.15, 0.7},
         DASH_TRAIL_COUNT = 8,
         DASH_TRAIL_LIFETIME = 0.4,

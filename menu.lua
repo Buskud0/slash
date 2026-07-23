@@ -10,7 +10,7 @@ local SAVE_FILE = "bot_settings.txt"
 local defaults = {
     allow_stab = true,
     allow_swing = true,
-    allow_net = true,
+    allow_freeze_bolt = true,
     allow_hook = true,
     allow_jump = true,
     allow_dash = false,
@@ -31,7 +31,7 @@ local main_items = {
 local attack_toggles = {
     { key = "allow_stab",  label = "Stab" },
     { key = "allow_swing", label = "Swing" },
-    { key = "allow_net",   label = "Net" },
+    { key = "allow_freeze_bolt",   label = "Freeze Bolt" },
     { key = "allow_hook",  label = "Hook" },
 }
 
@@ -41,7 +41,7 @@ local movement_modes = {
     { key = "to_center",   label = "Walk to Center" },
 }
 
-local bool_keys = {"allow_stab", "allow_swing", "allow_net", "allow_hook", "allow_jump", "allow_dash", "invincible"}
+local bool_keys = {"allow_stab", "allow_swing", "allow_freeze_bolt", "allow_hook", "allow_jump", "allow_dash", "invincible"}
 
 local function save_settings()
     local lines = {}
@@ -286,7 +286,7 @@ function Menu.keypressed(key)
         elseif key == "6" and bot_settings.movement == "chase" then bot_settings.allow_jump = not bot_settings.allow_jump
         elseif key == "7" and bot_settings.movement == "chase" then bot_settings.allow_stab = not bot_settings.allow_stab
         elseif key == "8" and bot_settings.movement == "chase" then bot_settings.allow_swing = not bot_settings.allow_swing
-        elseif key == "9" and bot_settings.movement == "chase" then bot_settings.allow_net = not bot_settings.allow_net
+        elseif key == "9" and bot_settings.movement == "chase" then bot_settings.allow_freeze_bolt = not bot_settings.allow_freeze_bolt
         elseif key == "0" and bot_settings.movement == "chase" then bot_settings.allow_hook = not bot_settings.allow_hook
         else changed = false
         end

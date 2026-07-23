@@ -183,7 +183,7 @@ local function update_movement_and_dash(player, dt, input)
         if input.dx ~= 0 then
             local speed = config.SPEED
             if player.slow_timer > 0 then
-                speed = speed * config.NET_SLOW_MULTIPLIER
+                speed = speed * config.FREEZE_BOLT_SLOW_MULTIPLIER
             end
             player.air_velocity_x = input.dx * speed
         elseif not player.is_on_ground then
@@ -264,7 +264,7 @@ function Physics.clear_pull(player)
 end
 
 function Physics.apply_net_slow(player, duration)
-    local dur = duration or config.NET_SLOW_DURATION
+    local dur = duration or config.FREEZE_BOLT_SLOW_DURATION
     player.slow_timer = math.max(player.slow_timer, dur)
 end
 
@@ -297,8 +297,8 @@ function Physics.update(player, dt, input)
 
         for i = #player.bullets, 1, -1 do
             local b = player.bullets[i]
-            b.x = b.x + b.dx * config.NET_SPEED * dt
-            b.y = b.y + b.dy * config.NET_SPEED * dt
+            b.x = b.x + b.dx * config.FREEZE_BOLT_SPEED * dt
+            b.y = b.y + b.dy * config.FREEZE_BOLT_SPEED * dt
             b.timer = b.timer - dt
             if b.timer <= 0 then
                 table.remove(player.bullets, i)
@@ -364,9 +364,9 @@ function Physics.update(player, dt, input)
                 y = cy,
                 dx = dx / len,
                 dy = dy / len,
-                timer = config.NET_LIFETIME
+                timer = config.FREEZE_BOLT_LIFETIME
             })
-            player.bullet_cooldown = config.NET_COOLDOWN
+            player.bullet_cooldown = config.FREEZE_BOLT_COOLDOWN
             bullet_fired = true
         end
     end
@@ -388,8 +388,8 @@ function Physics.update(player, dt, input)
 
     for i = #player.bullets, 1, -1 do
         local b = player.bullets[i]
-        b.x = b.x + b.dx * config.NET_SPEED * dt
-        b.y = b.y + b.dy * config.NET_SPEED * dt
+        b.x = b.x + b.dx * config.FREEZE_BOLT_SPEED * dt
+        b.y = b.y + b.dy * config.FREEZE_BOLT_SPEED * dt
         b.timer = b.timer - dt
         if b.timer <= 0 then
             table.remove(player.bullets, i)

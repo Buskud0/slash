@@ -79,7 +79,7 @@ function Bot.get_input(bot, enemies, settings, dt)
             end
         end
 
-        if s.allow_net and dist_to_target < config.STAB_LENGTH and roll > 0.85 then
+        if s.allow_freeze_bolt and dist_to_target < config.STAB_LENGTH and roll > 0.85 then
             input.shootBullet = true
             input.attackStab = false
             input.attackSlash = false
@@ -88,7 +88,7 @@ function Bot.get_input(bot, enemies, settings, dt)
             input.attackStab = false
             input.attackSlash = false
             input.shootBullet = false
-        elseif s.allow_net and dist_to_target < config.HOOK_RANGE * 2 and roll > 0.7 then
+        elseif s.allow_freeze_bolt and dist_to_target < config.HOOK_RANGE * 2 and roll > 0.7 then
             input.shootBullet = true
         end
     end
