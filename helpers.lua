@@ -76,10 +76,11 @@ function Helpers.point_in_hitbox(px, py, entity)
 end
 
 function Helpers.encode_entity(entity)
-    local s = string.format("%d,%d,%d,%d,%d,%s,%d,%d,%d,%d,%.1f,%.1f,%d,%d",
+    local attack_facing = entity.attack_facing or entity.view_facing or entity.facing
+    local s = string.format("%d,%d,%d,%d,%d,%s,%d,%d,%d,%d,%.1f,%.1f,%d,%d,%.3f",
         math.floor(entity.x), math.floor(entity.y),
         math.floor(entity.height),
-        math.floor((entity.view_facing or entity.facing) * 100),
+        math.floor(entity.facing * 100),
         math.floor(entity.attack_timer * 100),
         entity.attack_type or "none",
         entity.attack_id or 0,
@@ -89,13 +90,16 @@ function Helpers.encode_entity(entity)
         (entity.dash_timer or 0) * 100,
         (entity.combat_cooldown or 0) * 100,
         (entity.being_hooked or entity.pull_toward) and 1 or 0,
-        entity.invincible and 1 or 0)
+        entity.invincible and 1 or 0,
+        attack_facing)
     local bullets = entity.bullets or {}
     if #bullets > 0 then
         s = s .. ",b:"
         for i, bul in ipairs(bullets) do
-            if i > 1 then s = s .. "," end
-            s = s .. math.floor(bul.x) .. "," .. math.floor(bul.y)
+            if i > 1 then s = s .. ";" end
+            s = s .. (bul.type or "freeze") .. "," .. math.floor(bul.x) .. "," .. math.floor(bul.y)
+                .. "," .. string.format("%.2f", bul.dx or 0) .. "," .. string.format("%.2f", bul.dy or 0)
+                .. "," .. string.format("%.2f", bul.timer or 0)
         end
     else
         s = s .. ",b:"
@@ -113,13 +117,23 @@ function Helpers.encode_entity(entity)
 end
 
 function Helpers.decode_entity(raw)
-    local px, py, ph, pf, pa, pat, paid, phealth, pslow, pavx, pDash, pCC, pHook, pInv = raw:match(
-        "([^,]+),([^,]+),([^,]+),([^,]+),([^,]+),([^,]+),([^,]+),([^,]+),([^,]+),([^,]+),([^,]+),([^,]+),([^,]+),([^,]+)")
+    local main = raw:match("^(.-),b:")
+    if not main then return nil end
+    local pAF = main:match("^[^,]+,[^,]+,[^,]+,[^,]+,[^,]+,[^,]+,[^,]+,[^,]+,[^,]+,[^,]+,[^,]+,[^,]+,[^,]+,[^,]+,([^,]+)$")
+    local px, py, ph, pf, pa, pat, paid, phealth, pslow, pavx, pDash, pCC, pHook, pInv
+    if pAF then
+        px, py, ph, pf, pa, pat, paid, phealth, pslow, pavx, pDash, pCC, pHook, pInv = main:match(
+            "([^,]+),([^,]+),([^,]+),([^,]+),([^,]+),([^,]+),([^,]+),([^,]+),([^,]+),([^,]+),([^,]+),([^,]+),([^,]+),([^,]+)")
+    else
+        px, py, ph, pf, pa, pat, paid, phealth, pslow, pavx, pDash, pCC, pHook, pInv = main:match(
+            "([^,]+),([^,]+),([^,]+),([^,]+),([^,]+),([^,]+),([^,]+),([^,]+),([^,]+),([^,]+),([^,]+),([^,]+),([^,]+),([^,]+)")
+    end
     if not px then return nil end
     local entity = {
         x = tonumber(px), y = tonumber(py),
         height = tonumber(ph),
         facing = tonumber(pf) / 100,
+        attack_facing = tonumber(pAF) or 0,
         attack_timer = tonumber(pa) / 100,
         attack_type = pat ~= "none" and pat or nil,
         attack_id = tonumber(paid) or 0,
@@ -135,10 +149,16 @@ function Helpers.decode_entity(raw)
     local bullets_str = raw:match(",b:(.-),k:")
     if not bullets_str then bullets_str = raw:match(",b:([^|]*)") end
     if bullets_str and #bullets_str > 0 then
-        local idx = 1
-        for bx, by in bullets_str:gmatch("([^,]+),([^,]+)") do
-            entity.bullets[idx] = { x = tonumber(bx), y = tonumber(by) }
-            idx = idx + 1
+        for bullet_data in bullets_str:gmatch("([^;]+)") do
+            local btype, bx, by, bdx, bdy, btimer = bullet_data:match("([^,]+),([^,]+),([^,]+),([^,]+),([^,]+),([^,]+)")
+            if bx then
+                table.insert(entity.bullets, {
+                    type = btype,
+                    x = tonumber(bx), y = tonumber(by),
+                    dx = tonumber(bdx) or 0, dy = tonumber(bdy) or 0,
+                    timer = tonumber(btimer) or 0
+                })
+            end
         end
     end
     local hook_str = raw:match(",k:([^|]*)")

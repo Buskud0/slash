@@ -6,7 +6,6 @@ local V = require "visuals"
 local damage_texts = {}
 
 local function normalize_view(ent, meta)
-    local is_local = meta.is_local
     return {
         x = ent.x,
         y = ent.y,
@@ -16,16 +15,17 @@ local function normalize_view(ent, meta)
         hp = ent.health,
         show_health = meta.show_health,
         timer = ent.attack_timer or 0,
-        move_facing = is_local and ent.facing or (ent.facing or 1),
-        attack_facing = is_local and (ent.view_facing or ent.facing) or (ent.view_facing or ent.facing or 1),
+        move_facing = meta.is_local and ent.facing or (ent.facing or 1),
+        attack_facing = meta.is_local and (ent.view_facing or ent.facing) or (ent.attack_facing or 0),
         attack_type = ent.attack_type,
         slow_timer = ent.slow_timer or 0,
         combat_cooldown = ent.combat_cooldown or 0,
         being_hooked = ent.being_hooked or ent.pull_toward ~= nil,
-        bullets = is_local and nil or ent.bullets,
         hook = ent.hook,
         dash_timer = ent.dash_timer or 0,
-        dash_cooldown = is_local and ent.dash_cooldown or nil,
+        dash_cooldown = meta.is_local and ent.dash_cooldown or nil,
+        is_local = meta.is_local,
+        source_entity = ent,
     }
 end
 
@@ -47,21 +47,10 @@ local function draw_health_bar(x, y, health)
     local bar_width = config.SPRITE_SIZE
     local bar_height = 2
     local hp_percent = math.max(0, math.min(1, health / config.MAX_HEALTH))
-
     love.graphics.setColor(0.3, 0.1, 0.1, 0.8)
     love.graphics.rectangle("fill", x, y, bar_width, bar_height)
-
     love.graphics.setColor(0.2, 0.9, 0.2, 0.9)
     love.graphics.rectangle("fill", x, y, bar_width * hp_percent, bar_height)
-end
-
-local function draw_bullets(bullets)
-    if not bullets then return end
-    for _, b in ipairs(bullets) do
-        V.draw_bullet_glow(b.x, b.y)
-        love.graphics.setColor(0, 0.8, 0.9)
-        love.graphics.rectangle("fill", b.x - config.FREEZE_BOLT_SIZE / 2, b.y - config.FREEZE_BOLT_SIZE / 2, config.FREEZE_BOLT_SIZE, config.FREEZE_BOLT_SIZE)
-    end
 end
 
 local function draw_hook(hook, x, y, h)
@@ -107,9 +96,6 @@ local function draw_entity(v)
         V.draw_sword_arc(x, y, h, v.attack_type, v.timer, v.attack_facing)
     end
 
-    if v.bullets then
-        draw_bullets(v.bullets)
-    end
     if v.dash_cooldown and v.dash_cooldown <= 0 and v.dash_timer <= 0 then
         V.draw_dash_ready_sparkle(x, y, h)
     end
@@ -140,7 +126,7 @@ end
 
 local function draw_entities(local_player, players, my_id, bots)
     local entities = {
-        { key = "local", entity = local_player, r = 0, g = 1, b = 0, name = "You", show_health = true, is_local = true }
+        { key = "local", entity = local_player, r = 0, g = 0.75, b = 0, name = "You", show_health = true, is_local = true }
     }
     for id, p in pairs(players) do
         if id ~= my_id then
@@ -173,7 +159,11 @@ local function draw_entities(local_player, players, my_id, bots)
         draw_hook(v.hook, v.x, v.y, v.h)
     end
     for _, v in ipairs(views) do
-        draw_entity(v)
+        if v.source_entity and v.source_entity.draw then
+            v.source_entity:draw(v.color[1], v.color[2], v.color[3], v.name, v.show_health)
+        else
+            draw_entity(v)
+        end
     end
 
     return attached_hooks
@@ -224,7 +214,6 @@ function Renderer.draw_cooldowns(local_player)
     local freeze_cd = { name = "Freeze", timer = local_player.bullet_cooldown, max = config.FREEZE_BOLT_COOLDOWN, color = {0.3, 0.7, 0.9} }
 
     local cy = sh - padding - radius
-
     love.graphics.origin()
 
     local font_size = 0.5 * scale
@@ -253,7 +242,15 @@ function Renderer.draw(local_player, players, my_id, bots)
     V.draw_ground()
 
     local attached_hooks = draw_entities(local_player, players, my_id, bots)
-    draw_bullets(local_player.bullets)
+    if ActiveProjectiles then
+        for _, proj in ipairs(ActiveProjectiles) do
+            if proj.type == "freeze" then
+                V.draw_bullet_glow(proj.x, proj.y)
+                love.graphics.setColor(0, 0.8, 0.9)
+                love.graphics.rectangle("fill", proj.x - config.FREEZE_BOLT_SIZE / 2, proj.y - config.FREEZE_BOLT_SIZE / 2, config.FREEZE_BOLT_SIZE, config.FREEZE_BOLT_SIZE)
+            end
+        end
+    end
     for _, v in ipairs(attached_hooks) do
         draw_hook(v.hook, v.x, v.y, v.h)
     end

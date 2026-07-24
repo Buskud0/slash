@@ -33,6 +33,25 @@ local last_hit_targets = {}
 
 local is_host = false
 
+ActiveProjectiles = {}
+
+local function remove_projectile(proj)
+    for i = #ActiveProjectiles, 1, -1 do
+        if ActiveProjectiles[i] == proj then
+            table.remove(ActiveProjectiles, i)
+            break
+        end
+    end
+    if proj.owner and proj.owner.bullets then
+        for i = #proj.owner.bullets, 1, -1 do
+            if proj.owner.bullets[i] == proj then
+                table.remove(proj.owner.bullets, i)
+                break
+            end
+        end
+    end
+end
+
 local function try_toggle_bots()
     if is_host then
         Network.send_toggle_bots()
@@ -99,9 +118,9 @@ local function check_collisions()
         end
     end
 
-    -- Bot collisions: network players hitting bots
+    -- Bot collisions: network players hitting bots (host only)
     for id, p in pairs(network_players) do
-        if id ~= my_id and p.attack_timer and math.abs(p.attack_timer) > 0 then
+        if id ~= my_id and is_host and p.attack_timer and math.abs(p.attack_timer) > 0 then
             local attack_id = p.attack_id or 0
             local hit_key = id .. "_bots"
             if last_hit_by[hit_key] ~= attack_id then
@@ -121,25 +140,6 @@ local function check_collisions()
                         break
                     end
                 end
-            end
-        end
-    end
-
-    -- Bot bullets hitting local player
-    for bi, bot in ipairs(bots) do
-        for i = #bot.bullets, 1, -1 do
-            local b = bot.bullets[i]
-            if b.x >= bx and b.x <= bx + bw and b.y >= by and b.y <= by + bh then
-                local kb_angle
-                if b.dx and b.dy then
-                    kb_angle = math.atan2(b.dy, b.dx)
-                else
-                    kb_angle = math.atan2(b.y - (by + bh / 2), b.x - (bx + bw / 2))
-                end
-                Physics.apply_knockback(local_player, kb_angle, config.FREEZE_BOLT_KNOCKBACK_FORCE)
-                Physics.apply_net_slow(local_player)
-                Physics.remove_bullet(bot, i)
-                break
             end
         end
     end
@@ -183,9 +183,13 @@ local function check_local_player_hits()
                 local at = local_player.attack_type or ""
                 local damage = Helpers.get_attack_damage(at)
                 if is_bot then
-                    Physics.apply_knockback(target, contact_angle, nil, local_player.air_velocity_x, at)
-                    if not target.invincible then
-                        Physics.take_damage(target, damage)
+                    if is_host then
+                        Physics.apply_knockback(target, contact_angle, nil, local_player.air_velocity_x, at)
+                        if not target.invincible then
+                            Physics.take_damage(target, damage)
+                        end
+                    else
+                        Network.send_damage(key, damage, contact_angle, config.BASE_KNOCKBACK, 0, local_player.air_velocity_x, at)
                     end
                     Renderer.add_damage(target.x, target.y, damage)
                 else
@@ -203,38 +207,18 @@ local function check_projectile_collisions()
 
     local hooks = {}
     if local_player.hook then
-        hooks[#hooks + 1] = { h = local_player.hook, owner = "local", remove = function() local_player.hook = nil end }
+        hooks[#hooks + 1] = { h = local_player.hook, entity = local_player, remove = function() local_player.hook = nil end }
     end
     for bi, bot in ipairs(bots) do
         if bot.hook then
             local idx = bi
-            hooks[#hooks + 1] = { h = bot.hook, owner = "bot", remove = function() bots[idx].hook = nil end }
+            hooks[#hooks + 1] = { h = bot.hook, entity = bot, remove = function() bots[idx].hook = nil end }
         end
     end
     for id, p in pairs(network_players) do
         if id ~= my_id and p.hook then
             local pid = id
-            hooks[#hooks + 1] = { h = p.hook, owner = "net", id = pid, remove = function() if network_players[pid] then network_players[pid].hook = nil end end }
-        end
-    end
-
-    local bullets = {}
-    for i, b in ipairs(local_player.bullets) do
-        local idx = i
-        bullets[#bullets + 1] = { b = b, owner = "local", remove = function() Physics.remove_bullet(local_player, idx) end }
-    end
-    for bi, bot in ipairs(bots) do
-        for i, b in ipairs(bot.bullets) do
-            local bii, ii = bi, i
-            bullets[#bullets + 1] = { b = b, owner = "bot", remove = function() Physics.remove_bullet(bots[bii], ii) end }
-        end
-    end
-    for id, p in pairs(network_players) do
-        if id ~= my_id and p.bullets then
-            for i, b in ipairs(p.bullets) do
-                local pid, ii = id, i
-                bullets[#bullets + 1] = { b = b, owner = "net", id = pid, remove = function() if network_players[pid] and network_players[pid].bullets then table.remove(network_players[pid].bullets, ii) end end }
-            end
+            hooks[#hooks + 1] = { h = p.hook, entity = p, remove = function() if network_players[pid] then network_players[pid].hook = nil end end }
         end
     end
 
@@ -243,19 +227,16 @@ local function check_projectile_collisions()
     end
 
     local removed_hooks = {}
-    local removed_bullets = {}
+    local removed_projectiles = {}
 
     for hi = 1, #hooks do
         if not removed_hooks[hi] then
-            for bi = 1, #bullets do
-                if not removed_bullets[bi] then
-                    if hook_bullet_close(hooks[hi].h, bullets[bi].b) then
-                        local hx, hy = hooks[hi].h.x, hooks[hi].h.y
-                        local bx, by = bullets[bi].b.x, bullets[bi].b.y
-                        Renderer.add_clash((hx + bx) / 2, (hy + by) / 2)
-                        removed_hooks[hi] = true
-                        removed_bullets[bi] = true
-                    end
+            for pi, proj in ipairs(ActiveProjectiles) do
+                if not removed_projectiles[proj] and proj.type == "freeze" and hook_bullet_close(hooks[hi].h, proj) then
+                    local hx, hy = hooks[hi].h.x, hooks[hi].h.y
+                    Renderer.add_clash((hx + proj.x) / 2, (hy + proj.y) / 2)
+                    removed_hooks[hi] = true
+                    removed_projectiles[proj] = true
                 end
             end
         end
@@ -276,15 +257,15 @@ local function check_projectile_collisions()
         end
     end
 
-    for bi = 1, #bullets do
-        if not removed_bullets[bi] then
-            for bj = bi + 1, #bullets do
-                if not removed_bullets[bj] then
-                    local a, b = bullets[bi].b, bullets[bj].b
-                    if math.abs(a.x - b.x) < config.FREEZE_BOLT_SIZE and math.abs(a.y - b.y) < config.FREEZE_BOLT_SIZE then
+    for pi = 1, #ActiveProjectiles do
+        if not removed_projectiles[ActiveProjectiles[pi]] then
+            for pj = pi + 1, #ActiveProjectiles do
+                if not removed_projectiles[ActiveProjectiles[pj]] then
+                    local a, b = ActiveProjectiles[pi], ActiveProjectiles[pj]
+                    if a.type == "freeze" and b.type == "freeze" and math.abs(a.x - b.x) < config.FREEZE_BOLT_SIZE and math.abs(a.y - b.y) < config.FREEZE_BOLT_SIZE then
                         Renderer.add_clash((a.x + b.x) / 2, (a.y + b.y) / 2)
-                        removed_bullets[bi] = true
-                        removed_bullets[bj] = true
+                        removed_projectiles[a] = true
+                        removed_projectiles[b] = true
                     end
                 end
             end
@@ -295,26 +276,26 @@ local function check_projectile_collisions()
     if local_player.attack_timer ~= 0 then
         local tx, ty = Helpers.get_sword_tip(local_player)
         local cx, cy = Helpers.get_player_center(local_player)
-        swords[#swords + 1] = { cx = cx, cy = cy, tx = tx, ty = ty, owner = "local" }
+        swords[#swords + 1] = { cx = cx, cy = cy, tx = tx, ty = ty, entity = local_player }
     end
     for bi, bot in ipairs(bots) do
         if bot.attack_timer ~= 0 then
             local tx, ty = Helpers.get_sword_tip(bot)
             local cx, cy = Helpers.get_player_center(bot)
-            swords[#swords + 1] = { cx = cx, cy = cy, tx = tx, ty = ty, owner = "bot" }
+            swords[#swords + 1] = { cx = cx, cy = cy, tx = tx, ty = ty, entity = bot }
         end
     end
     for id, p in pairs(network_players) do
         if id ~= my_id and p.attack_timer and math.abs(p.attack_timer) > 0 then
             local tx, ty = Helpers.get_sword_tip(p)
             local cx, cy = Helpers.get_player_center(p)
-            swords[#swords + 1] = { cx = cx, cy = cy, tx = tx, ty = ty, owner = "net" }
+            swords[#swords + 1] = { cx = cx, cy = cy, tx = tx, ty = ty, entity = p }
         end
     end
 
     for _, sw in ipairs(swords) do
         for hi = 1, #hooks do
-            if not removed_hooks[hi] and hooks[hi].owner ~= sw.owner then
+            if not removed_hooks[hi] and hooks[hi].entity ~= sw.entity then
                 local hk = hooks[hi].h
                 local hk_half = config.HOOK_SIZE / 2
                 if check_line_collision(sw.cx, sw.cy, sw.tx, sw.ty, hk.x - hk_half, hk.y - hk_half, config.HOOK_SIZE, config.HOOK_SIZE) then
@@ -323,12 +304,11 @@ local function check_projectile_collisions()
                 end
             end
         end
-        for bi = 1, #bullets do
-            if not removed_bullets[bi] and bullets[bi].owner ~= sw.owner then
-                local bb = bullets[bi].b
-                if check_line_collision(sw.cx, sw.cy, sw.tx, sw.ty, bb.x - half_net, bb.y - half_net, config.FREEZE_BOLT_SIZE, config.FREEZE_BOLT_SIZE) then
-                    Renderer.add_clash((sw.tx + bb.x) / 2, (sw.ty + bb.y) / 2)
-                    removed_bullets[bi] = true
+        for _, proj in ipairs(ActiveProjectiles) do
+            if not removed_projectiles[proj] and proj.type == "freeze" and proj.owner ~= sw.entity then
+                if check_line_collision(sw.cx, sw.cy, sw.tx, sw.ty, proj.x - half_net, proj.y - half_net, config.FREEZE_BOLT_SIZE, config.FREEZE_BOLT_SIZE) then
+                    Renderer.add_clash((sw.tx + proj.x) / 2, (sw.ty + proj.y) / 2)
+                    removed_projectiles[proj] = true
                 end
             end
         end
@@ -337,7 +317,7 @@ local function check_projectile_collisions()
     local removed_swords = {}
     for i = 1, #swords do
         for j = i + 1, #swords do
-            if not removed_swords[i] and not removed_swords[j] then
+            if not removed_swords[swords[i]] and not removed_swords[swords[j]] then
                 local a, b = swords[i], swords[j]
                 local dx1, dy1 = a.tx - a.cx, a.ty - a.cy
                 local dx2, dy2 = b.tx - b.cx, b.ty - b.cy
@@ -349,58 +329,68 @@ local function check_projectile_collisions()
                         local ix = a.cx + dx1 * t
                         local iy = a.cy + dy1 * t
                         Renderer.add_clash(ix, iy)
-                        removed_swords[i] = true
-                        removed_swords[j] = true
+                        removed_swords[swords[i]] = true
+                        removed_swords[swords[j]] = true
                     end
                 end
             end
         end
     end
-    for si, _ in pairs(removed_swords) do
-        local sw = swords[si]
-        if sw.owner == "local" then
-            local_player.attack_timer = 0
-            local_player.attack_type = nil
-        elseif sw.owner == "bot" then
-            local bi = nil
-            for ii, b in ipairs(bots) do
-                if b.x + config.SPRITE_SIZE / 2 == sw.cx then bi = ii; break end
-            end
-            if bi then bots[bi].attack_timer = 0; bots[bi].attack_type = nil end
-        elseif sw.owner == "net" and sw.id then
-            if network_players[sw.id] then
-                network_players[sw.id].attack_timer = 0
-                network_players[sw.id].attack_type = nil
-            end
+    for sw, _ in pairs(removed_swords) do
+        if sw.entity then
+            sw.entity.attack_timer = 0
+            sw.entity.attack_type = nil
         end
     end
 
     for hi, _ in pairs(removed_hooks) do
         hooks[hi].remove()
     end
-    for bi, _ in pairs(removed_bullets) do
-        bullets[bi].remove()
+    for proj, _ in pairs(removed_projectiles) do
+        remove_projectile(proj)
     end
 end
 
 local function check_bullet_hits()
-    for i = #local_player.bullets, 1, -1 do
-        local b = local_player.bullets[i]
-        local hit = false
+    for pi = #ActiveProjectiles, 1, -1 do
+        local proj = ActiveProjectiles[pi]
+        if proj.type ~= "freeze" then goto skip end
+        local is_local_bullet = proj.owner == local_player
+        local is_controlled = is_local_bullet or proj._is_bot_bullet or (is_host and proj.owner and proj.owner.getHit)
+        if not is_controlled then goto skip end
+
+        local lbx, lby, lbw, lbh = Helpers.get_entity_hitbox(local_player)
+        if proj.x >= lbx and proj.x <= lbx + lbw and proj.y >= lby and proj.y <= lby + lbh then
+            if proj.owner ~= local_player then
+                local kb_angle = math.atan2(proj.dy, proj.dx)
+                local_player:getHit(proj)
+                remove_projectile(proj)
+                goto skip
+            end
+        end
+
         Helpers.each_target(network_players, my_id, bots, function(key, target, is_bot)
+            if proj.owner == target then return end
             local bx, by, bw, bh = Helpers.get_entity_hitbox(target)
-            if b.x >= bx and b.x <= bx + bw and b.y >= by and b.y <= by + bh then
-                local kb_angle = math.atan2(b.dy, b.dx)
-                Network.send_damage(key, 0, kb_angle, config.FREEZE_BOLT_KNOCKBACK_FORCE, config.FREEZE_BOLT_SLOW_DURATION)
-                if is_bot and is_host then
-                    Physics.apply_knockback(target, kb_angle, config.FREEZE_BOLT_KNOCKBACK_FORCE)
-                    Physics.apply_net_slow(target)
+            if proj.x >= bx and proj.x <= bx + bw and proj.y >= by and proj.y <= by + bh then
+                local kb_angle = math.atan2(proj.dy, proj.dx)
+                if target.getHit then
+                    target:getHit(proj)
                 end
-                Physics.remove_bullet(local_player, i)
-                hit = true
+                if is_local_bullet then
+                    if not is_host then
+                        Network.send_damage(key, 0, kb_angle, config.FREEZE_BOLT_KNOCKBACK_FORCE, config.FREEZE_BOLT_SLOW_DURATION)
+                    elseif not target.getHit then
+                        Network.send_damage(key, 0, kb_angle, config.FREEZE_BOLT_KNOCKBACK_FORCE, config.FREEZE_BOLT_SLOW_DURATION)
+                    end
+                elseif is_host and not target.getHit then
+                    Network.send_damage(key, 0, kb_angle, config.FREEZE_BOLT_KNOCKBACK_FORCE, config.FREEZE_BOLT_SLOW_DURATION)
+                end
+                remove_projectile(proj)
                 return true
             end
         end)
+        ::skip::
     end
 end
 
@@ -650,6 +640,27 @@ local function run_client(dt)
             Physics.apply_pull(local_player, pending_pull.x, pending_pull.y, pending_pull.dx, pending_pull.dy)
         end
         Network.pending_pull = nil
+    end
+
+    ActiveProjectiles = {}
+    local function add_bullets(source, owner, is_bot_source)
+        if not source then return end
+        for _, proj in ipairs(source) do
+            proj.owner = owner
+            if is_bot_source then
+                proj._is_bot_bullet = true
+            end
+            table.insert(ActiveProjectiles, proj)
+        end
+    end
+    add_bullets(local_player.bullets, local_player)
+    for _, bot in ipairs(bots) do
+        add_bullets(bot.bullets, bot, true)
+    end
+    for id, p in pairs(network_players) do
+        if id ~= my_id then
+            add_bullets(p.bullets, p)
+        end
     end
 
     check_collisions()
