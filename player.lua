@@ -29,6 +29,7 @@ function Player.new(spawn_x, spawn_y)
     self.air_velocity_x = 0
     self.attack_id = 0
     self.health = config.MAX_HEALTH
+    self.invincible = false
     self.hit_gravity_timer = 0
     self.slow_timer = 0
     self.bullets = {}

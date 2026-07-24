@@ -4,7 +4,6 @@ local Renderer = {}
 local V = require "visuals"
 
 local damage_texts = {}
-local bot_invincible = false
 
 local function normalize_view(ent, meta)
     local is_local = meta.is_local
@@ -149,7 +148,7 @@ local function draw_entities(local_player, players, my_id, bots)
         end
     end
     for i, bot in ipairs(bots) do
-        table.insert(entities, { key = "bot_" .. i, entity = bot, r = 0.5, g = 0.5, b = 0.5, name = "Bot " .. i, show_health = not bot_invincible })
+        table.insert(entities, { key = "bot_" .. i, entity = bot, r = 0.5, g = 0.5, b = 0.5, name = "Bot " .. i, show_health = not bot.invincible })
     end
 
     local views = {}
@@ -178,10 +177,6 @@ local function draw_entities(local_player, players, my_id, bots)
     end
 
     return attached_hooks
-end
-
-function Renderer.set_bot_invincible(val)
-    bot_invincible = val
 end
 
 function Renderer.add_damage(x, y, amount, color)

@@ -76,7 +76,7 @@ function Helpers.point_in_hitbox(px, py, entity)
 end
 
 function Helpers.encode_entity(entity)
-    local s = string.format("%d,%d,%d,%d,%d,%s,%d,%d,%d,%d,%.1f,%.1f,%d",
+    local s = string.format("%d,%d,%d,%d,%d,%s,%d,%d,%d,%d,%.1f,%.1f,%d,%d",
         math.floor(entity.x), math.floor(entity.y),
         math.floor(entity.height),
         math.floor((entity.view_facing or entity.facing) * 100),
@@ -88,7 +88,8 @@ function Helpers.encode_entity(entity)
         math.floor((entity.air_velocity_x or 0) * 100),
         (entity.dash_timer or 0) * 100,
         (entity.combat_cooldown or 0) * 100,
-        (entity.being_hooked or entity.pull_toward) and 1 or 0)
+        (entity.being_hooked or entity.pull_toward) and 1 or 0,
+        entity.invincible and 1 or 0)
     local bullets = entity.bullets or {}
     if #bullets > 0 then
         s = s .. ",b:"
@@ -112,8 +113,8 @@ function Helpers.encode_entity(entity)
 end
 
 function Helpers.decode_entity(raw)
-    local px, py, ph, pf, pa, pat, paid, phealth, pslow, pavx, pDash, pCC, pHook = raw:match(
-        "([^,]+),([^,]+),([^,]+),([^,]+),([^,]+),([^,]+),([^,]+),([^,]+),([^,]+),([^,]+),([^,]+),([^,]+),([^,]+)")
+    local px, py, ph, pf, pa, pat, paid, phealth, pslow, pavx, pDash, pCC, pHook, pInv = raw:match(
+        "([^,]+),([^,]+),([^,]+),([^,]+),([^,]+),([^,]+),([^,]+),([^,]+),([^,]+),([^,]+),([^,]+),([^,]+),([^,]+),([^,]+)")
     if not px then return nil end
     local entity = {
         x = tonumber(px), y = tonumber(py),
@@ -128,6 +129,7 @@ function Helpers.decode_entity(raw)
         dash_timer = (tonumber(pDash) or 0) / 100,
         combat_cooldown = (tonumber(pCC) or 0) / 100,
         being_hooked = (tonumber(pHook) or 0) == 1,
+        invincible = (tonumber(pInv) or 0) == 1,
         bullets = {}, hook = nil
     }
     local bullets_str = raw:match(",b:(.-),k:")
