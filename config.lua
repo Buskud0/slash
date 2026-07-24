@@ -51,7 +51,8 @@ return {
     BOT_JUMP_HOLD_DURATION = 0.18,
 
     -- Freeze Bolt Constants
-    FREEZE_BOLT_SPEED = 200,
+    FREEZE_BOLT_SPEED = 400,
+    FREEZE_BOLT_ACCELERATION = 1,
     FREEZE_BOLT_COOLDOWN = 3,
     FREEZE_BOLT_LIFETIME = 2,
     FREEZE_BOLT_SIZE = 4,
@@ -65,6 +66,7 @@ return {
     HOOK_COOLDOWN = 3,
     HOOK_SIZE = 3,
     HOOK_PULL_FORCE = 300,
+    HOOK_RETRACT_SPEED = 300,
 
     -- Outline Colors
     OUTLINE_FROZEN = {0, 0.5, 1, 0.9},

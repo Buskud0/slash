@@ -153,9 +153,6 @@ function Renderer.draw(render_list)
     for _, v in ipairs(unattached_hooks) do
         draw_hook(v.hook, v.x, v.y, v.h)
     end
-    for _, v in ipairs(views) do
-        draw_entity(v)
-    end
 
     if ActiveProjectiles then
         for _, proj in ipairs(ActiveProjectiles) do
@@ -165,6 +162,9 @@ function Renderer.draw(render_list)
                 love.graphics.rectangle("fill", proj.x - config.FREEZE_BOLT_SIZE / 2, proj.y - config.FREEZE_BOLT_SIZE / 2, config.FREEZE_BOLT_SIZE, config.FREEZE_BOLT_SIZE)
             end
         end
+    end
+    for _, v in ipairs(views) do
+        draw_entity(v)
     end
     for _, v in ipairs(attached_hooks) do
         draw_hook(v.hook, v.x, v.y, v.h)

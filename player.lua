@@ -185,7 +185,6 @@ local function move_and_dash(self, dt, cmd)
 
     if self.pull_toward then
         self.pull_toward.timer = self.pull_toward.timer - dt
-        self.combat_cooldown = 1
         if self.pull_toward.timer <= 0 then
             self.knockback_x = -self.pull_toward.dx * config.HOOK_PULL_FORCE
             self.y_velocity = -self.pull_toward.dy * config.HOOK_PULL_FORCE
@@ -204,7 +203,6 @@ local function move_and_dash(self, dt, cmd)
             self.x = self.x + (dx / len) * config.HOOK_PULL_FORCE * dt
             self.y = self.y + (dy / len) * config.HOOK_PULL_FORCE * dt
         end
-        self.combat_cooldown = 1
         self.y_velocity = 0
         self.knockback_x = 0
         self.is_on_ground = false
@@ -272,22 +270,35 @@ function Player:update(dt, cmd)
 
         if self.hook then
             local h = self.hook
-            if not h.target_id then
+            if h.retracting then
+                local cx, cy = Helpers.get_player_center(self)
+                local dx = cx - h.x
+                local dy = cy - h.y
+                local dist = math.sqrt(dx * dx + dy * dy)
+                if dist < 5 then
+                    self.hook = nil
+                    self.pull_toward = nil
+                else
+                    local step = config.HOOK_RETRACT_SPEED * dt
+                    h.x = h.x + (dx / dist) * step
+                    h.y = h.y + (dy / dist) * step
+                end
+            elseif not h.target_id then
                 local step = config.HOOK_SPEED * dt
                 h.x = h.x + h.dx * step
                 h.y = h.y + h.dy * step
                 h.traveled = h.traveled + step
             end
-            if h.traveled >= config.HOOK_RANGE then
-                self.hook = nil
-                self.pull_toward = nil
+            if not h.retracting and h.traveled >= config.HOOK_RANGE then
+                h.retracting = true
             end
         end
 
         for i = #self.bullets, 1, -1 do
             local b = self.bullets[i]
-            b.x = b.x + b.dx * config.FREEZE_BOLT_SPEED * dt
-            b.y = b.y + b.dy * config.FREEZE_BOLT_SPEED * dt
+            b.speed = math.min(config.FREEZE_BOLT_SPEED, b.speed + config.FREEZE_BOLT_SPEED / config.FREEZE_BOLT_ACCELERATION * dt)
+            b.x = b.x + b.dx * b.speed * dt
+            b.y = b.y + b.dy * b.speed * dt
             b.timer = b.timer - dt
             if b.timer <= 0 then table.remove(self.bullets, i) end
         end
@@ -320,15 +331,29 @@ function Player:update(dt, cmd)
 
     if self.hook then
         local h = self.hook
-        if not h.target_id then
+        if h.retracting then
+            local cx, cy = Helpers.get_player_center(self)
+            local dx = cx - h.x
+            local dy = cy - h.y
+            local dist = math.sqrt(dx * dx + dy * dy)
+            if dist < 5 then
+                self.hook = nil
+                self.pull_toward = nil
+                self.combat_cooldown = 0
+            else
+                local step = config.HOOK_RETRACT_SPEED * dt
+                h.x = h.x + (dx / dist) * step
+                h.y = h.y + (dy / dist) * step
+                self.combat_cooldown = 1
+            end
+        elseif not h.target_id then
             local step = config.HOOK_SPEED * dt
             h.x = h.x + h.dx * step
             h.y = h.y + h.dy * step
             h.traveled = h.traveled + step
         end
-        if h.traveled >= config.HOOK_RANGE then
-            self.hook = nil
-            self.pull_toward = nil
+        if not h.retracting and h.traveled >= config.HOOK_RANGE then
+            h.retracting = true
         end
     end
 
@@ -339,7 +364,7 @@ function Player:update(dt, cmd)
         local dy = cmd.aimY - cy
         local len = math.sqrt(dx * dx + dy * dy)
         if len > 0 then
-            local proj = { type = "freeze", x = cx, y = cy, dx = dx / len, dy = dy / len, timer = config.FREEZE_BOLT_LIFETIME, owner = self }
+            local proj = { type = "freeze", x = cx, y = cy, dx = dx / len, dy = dy / len, speed = 0, timer = config.FREEZE_BOLT_LIFETIME, owner = self }
             table.insert(self.bullets, proj)
             self.bullet_cooldown = config.FREEZE_BOLT_COOLDOWN
             bullet_fired = true
@@ -361,8 +386,9 @@ function Player:update(dt, cmd)
 
     for i = #self.bullets, 1, -1 do
         local b = self.bullets[i]
-        b.x = b.x + b.dx * config.FREEZE_BOLT_SPEED * dt
-        b.y = b.y + b.dy * config.FREEZE_BOLT_SPEED * dt
+        b.speed = math.min(config.FREEZE_BOLT_SPEED, b.speed + config.FREEZE_BOLT_SPEED / config.FREEZE_BOLT_ACCELERATION * dt)
+        b.x = b.x + b.dx * b.speed * dt
+        b.y = b.y + b.dy * b.speed * dt
         b.timer = b.timer - dt
         if b.timer <= 0 then table.remove(self.bullets, i) end
     end
@@ -397,7 +423,9 @@ function Player:takeDamage(amount)
     self.hit_gravity_timer = config.HIT_GRAVITY_DURATION
     self.attack_timer = 0
     self.attack_type = nil
-    self.combat_cooldown = config.COMBAT_COOLDOWN
+    if amount > 0 then
+        self.combat_cooldown = config.COMBAT_COOLDOWN
+    end
     if self.health <= 0 then
         self.x = config.SPAWN_X
         self.y = config.SPAWN_Y
@@ -420,6 +448,7 @@ function Player:applyKnockback(angle, force, attacker_vx, attack_type)
 end
 
 function Player:applyPull(target_x, target_y, hook_dx, hook_dy)
+    self.hook = nil
     if not self.pull_toward then
         self.pull_toward = { x = target_x, y = target_y, timer = 0.05, dx = hook_dx, dy = hook_dy }
     else
@@ -440,7 +469,6 @@ function Player:applyEffect(effect_type, params)
         local angle = math.atan2(px.dy, px.dx)
         self:applyKnockback(angle, config.FREEZE_BOLT_KNOCKBACK_FORCE)
         self:applySlow(config.FREEZE_BOLT_SLOW_DURATION)
-        self.combat_cooldown = config.COMBAT_COOLDOWN
         return 0
     elseif effect_type == "sword" then
         local at = params.attack_type or ""

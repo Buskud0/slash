@@ -103,6 +103,7 @@ function Helpers.encode_entity(entity)
             s = s .. (bul.type or "freeze") .. "," .. math.floor(bul.x) .. "," .. math.floor(bul.y)
                 .. "," .. string.format("%.2f", bul.dx or 0) .. "," .. string.format("%.2f", bul.dy or 0)
                 .. "," .. string.format("%.2f", bul.timer or 0)
+                .. "," .. string.format("%.2f", bul.speed or 0)
         end
     else
         s = s .. ",b:"
@@ -147,13 +148,17 @@ function Helpers.decode_entity(raw)
     if not bullets_str then bullets_str = raw:match(",b:([^|]*)") end
     if bullets_str and #bullets_str > 0 then
         for bullet_data in bullets_str:gmatch("([^;]+)") do
-            local btype, bx, by, bdx, bdy, btimer = bullet_data:match("([^,]+),([^,]+),([^,]+),([^,]+),([^,]+),([^,]+)")
+            local btype, bx, by, bdx, bdy, btimer, bspeed = bullet_data:match("([^,]+),([^,]+),([^,]+),([^,]+),([^,]+),([^,]+),([^,]+)")
+            if not bspeed then
+                btype, bx, by, bdx, bdy, btimer = bullet_data:match("([^,]+),([^,]+),([^,]+),([^,]+),([^,]+),([^,]+)")
+            end
             if bx then
                 table.insert(entity.bullets, {
                     type = btype,
                     x = tonumber(bx), y = tonumber(by),
                     dx = tonumber(bdx) or 0, dy = tonumber(bdy) or 0,
-                    timer = tonumber(btimer) or 0
+                    timer = tonumber(btimer) or 0,
+                    speed = tonumber(bspeed) or 0
                 })
             end
         end

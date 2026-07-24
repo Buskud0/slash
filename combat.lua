@@ -342,6 +342,7 @@ end
 local function check_hook_hits(state, dt)
     local player = state.local_player
     if not player.hook then return end
+    if player.hook.retracting then return end
 
     local h = player.hook
     local cx, cy = Helpers.get_player_center(player)
@@ -388,6 +389,7 @@ end
 local function check_bot_hook_hits(state)
     for bi, bot in ipairs(state.bots) do
         if not bot.hook then goto continue_bot end
+        if bot.hook.retracting then goto continue_bot end
 
         local h = bot.hook
         local bcx, bcy = Helpers.get_player_center(bot)
