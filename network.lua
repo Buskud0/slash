@@ -9,9 +9,7 @@ local Network = {
     my_id = nil, 
     players = {},
     pending_damage = nil,
-    pending_pull = nil,
-    pending_bots = nil,
-    pending_toggle = false
+    pending_pull = nil
 }
 
 function Network.init()
@@ -45,17 +43,7 @@ function Network.send_pull(target_id, target_x, target_y, hook_dx, hook_dy)
     end
 end
 
-function Network.send_bots(data)
-    if Network.server then
-        Network.server:send("bots:" .. data, 0, "unreliable")
-    end
-end
 
-function Network.send_toggle_bots()
-    if Network.server then
-        Network.server:send("toggle_bots:", 0, "reliable")
-    end
-end
 
 local function parse_state(payload)
     local active = {}
@@ -95,21 +83,9 @@ function Network.update(local_player)
                         Chat.add(data:sub(5))
                     elseif data:sub(1, 7) == "damage:" then
                         local parts = data:sub(8)
-                        local target_id, amount, angle, force, slow, avx, at
-                        
-                        if Helpers.is_bot_id(parts) then
-                            local bid, rest = parts:match("([^,]+),(.+)")
-                            if bid and rest then
-                                target_id = bid
-                                amount, angle, force, slow, avx, at = rest:match("([^,]+),([^,]+),([^,]+),([^,]+),([^,]+),(.*)")
-                            end
-                        else
-                            target_id = nil
-                            amount, angle, force, slow, avx, at = parts:match("([^,]+),([^,]+),([^,]+),([^,]+),([^,]+),(.*)")
-                        end
-                        
+                        local amount, angle, force, slow, avx, at = parts:match("([^,]+),([^,]+),([^,]+),([^,]+),([^,]+),(.*)")
                         if amount and angle and force then
-                            local result = {
+                            Network.pending_damage = {
                                 amount = tonumber(amount),
                                 knockback = tonumber(angle),
                                 force = tonumber(force),
@@ -117,41 +93,18 @@ function Network.update(local_player)
                                 attacker_vx = tonumber(avx) or 0,
                                 attack_type = at or ""
                             }
-                            if target_id then
-                                result.target_id = target_id
-                            end
-                            Network.pending_damage = result
                         end
                     elseif data:sub(1, 5) == "pull:" then
                         local parts = data:sub(6)
-                        local target_id, tx, ty, dx, dy
-                        
-                        if Helpers.is_bot_id(parts) then
-                            local bid
-                            bid, tx, ty, dx, dy = parts:match("([^,]+),([^,]+),([^,]+),([^,]+),([^,]+)")
-                            if bid then
-                                target_id = bid
-                            end
-                        else
-                            tx, ty, dx, dy = parts:match("([^,]+),([^,]+),([^,]+),([^,]+)")
-                        end
-                        
+                        local tx, ty, dx, dy = parts:match("([^,]+),([^,]+),([^,]+),([^,]+)")
                         if tx and ty and dx and dy then
-                            local result = {
+                            Network.pending_pull = {
                                 x = tonumber(tx),
                                 y = tonumber(ty),
                                 dx = tonumber(dx),
                                 dy = tonumber(dy)
                             }
-                            if target_id then
-                                result.target_id = target_id
-                            end
-                            Network.pending_pull = result
                         end
-                    elseif data:sub(1, 5) == "bots:" then
-                        Network.pending_bots = data:sub(6)
-                    elseif data:sub(1, 12) == "toggle_bots:" then
-                        Network.pending_toggle = true
                     end
                 elseif event.type == "disconnect" then
                     Network.my_id = nil
@@ -166,7 +119,7 @@ function Network.update(local_player)
         end
     end
 
-    return Network.players, Network.my_id, lost_connection, Network.pending_damage, Network.pending_pull, Network.pending_bots, Network.pending_toggle
+    return Network.players, Network.my_id, lost_connection, Network.pending_damage, Network.pending_pull
 end
 
 function Network.quit()

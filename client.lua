@@ -40,28 +40,6 @@ local function build_render_list()
     return list
 end
 
-local function encode_bots(bot_list)
-    local settings = Menu.get_settings()
-    local parts = {}
-    for _, b in ipairs(bot_list) do
-        b.invincible = settings.invincible
-        table.insert(parts, Helpers.encode_entity(b))
-    end
-    return table.concat(parts, "|")
-end
-
-local function decode_bots(data)
-    local result = {}
-    if not data or #data == 0 then return result end
-    for bd in data:gmatch("([^|]+)") do
-        local entity = Helpers.decode_entity(bd)
-        if entity then
-            table.insert(result, entity)
-        end
-    end
-    return result
-end
-
 local function run_client(dt)
     local cmd
 
@@ -73,7 +51,7 @@ local function run_client(dt)
 
     local_player:update(dt, cmd)
 
-    local players, id, lost, pending_damage, pending_pull, pending_bots, pending_toggle = Network.update(Player.to_view(local_player))
+    local players, id, lost, pending_damage, pending_pull = Network.update(Player.to_view(local_player))
     network_players, my_id = players, id
 
     for id, p in pairs(network_players) do
@@ -87,28 +65,6 @@ local function run_client(dt)
 
     if Menu.consume_toggle_bots() then
         Client.try_toggle_bots()
-    end
-
-    if pending_toggle then
-        Network.pending_toggle = false
-        if is_host then
-            bots_enabled = not bots_enabled
-            if bots_enabled then
-                for i = 1, config.BOT_COUNT do
-                    local bx = config.SPAWN_X + 80 + (i - 1) * 40
-                    local by = config.SPAWN_Y
-                    local bot = Player.new(bx, by, {0.5, 0.5, 0.5})
-                    bot.speed_mult = config.BOT_SPEED_MULT
-                    bot.name = "Bot " .. i
-                    bots[i] = bot
-                end
-            else
-                bots = {}
-            end
-            Chat.add(bots_enabled and "Bots enabled" or "Bots disabled")
-        else
-            Chat.add("Bots toggled by host")
-        end
     end
 
     if is_host then
@@ -126,63 +82,23 @@ local function run_client(dt)
             bot:update(dt, bot_cmd)
             bot:updateState()
         end
-        Network.send_bots(encode_bots(bots))
-    else
-        if pending_bots ~= nil then
-            local decoded = decode_bots(pending_bots)
-            bots = {}
-            for _, raw in ipairs(decoded) do
-                raw.mainColor = {0.5, 0.5, 0.5}
-                raw.name = "Bot"
-                table.insert(bots, raw)
-            end
-            Network.pending_bots = nil
-        end
     end
 
     if pending_damage then
-        if pending_damage.target_id and Helpers.is_bot_id(pending_damage.target_id) then
-            if is_host then
-                local bi = tonumber(pending_damage.target_id:sub(5))
-                local bot = bots[bi]
-                if bot then
-                    local dmg = bot:applyEffect("net_damage", {
-                        amount = pending_damage.amount,
-                        angle = pending_damage.knockback,
-                        force = pending_damage.force,
-                        attacker_vx = pending_damage.attacker_vx,
-                        attack_type = pending_damage.attack_type,
-                        slow = pending_damage.slow,
-                    })
-                    if dmg > 0 then
-                        Renderer.add_damage(bot.x, bot.y, dmg)
-                    end
-                end
-            end
-        else
-            local dmg = local_player:applyEffect("net_damage", {
-                amount = pending_damage.amount,
-                angle = pending_damage.knockback,
-                force = pending_damage.force,
-                attacker_vx = pending_damage.attacker_vx,
-                attack_type = pending_damage.attack_type,
-                slow = pending_damage.slow,
-            })
-            Renderer.add_damage(local_player.x, local_player.y, dmg, {1, 0.3, 0.3})
-        end
+        local dmg = local_player:applyEffect("net_damage", {
+            amount = pending_damage.amount,
+            angle = pending_damage.knockback,
+            force = pending_damage.force,
+            attacker_vx = pending_damage.attacker_vx,
+            attack_type = pending_damage.attack_type,
+            slow = pending_damage.slow,
+        })
+        Renderer.add_damage(local_player.x, local_player.y, dmg, {1, 0.3, 0.3})
         Network.pending_damage = nil
     end
 
     if pending_pull then
-        if pending_pull.target_id and Helpers.is_bot_id(pending_pull.target_id) then
-            local bi = tonumber(pending_pull.target_id:sub(5))
-            local bot = bots[bi]
-            if bot and is_host then
-                bot:applyPull(pending_pull.x, pending_pull.y, pending_pull.dx, pending_pull.dy)
-            end
-        else
-            local_player:applyPull(pending_pull.x, pending_pull.y, pending_pull.dx, pending_pull.dy)
-        end
+        local_player:applyPull(pending_pull.x, pending_pull.y, pending_pull.dx, pending_pull.dy)
         Network.pending_pull = nil
     end
 
@@ -229,7 +145,21 @@ end
 
 function Client.try_toggle_bots()
     if is_host then
-        Network.send_toggle_bots()
+        bots_enabled = not bots_enabled
+        if bots_enabled then
+            for i = 1, config.BOT_COUNT do
+                local bx = config.SPAWN_X + 80 + (i - 1) * 40
+                local by = config.SPAWN_Y
+                local bot = Player.new(bx, by, {0.5, 0.5, 0.5})
+                bot.speed_mult = config.BOT_SPEED_MULT
+                bot.name = "Bot " .. i
+                bots[i] = bot
+            end
+        else
+            bots = {}
+        end
+        Combat.reset_tracking()
+        Chat.add(bots_enabled and "Bots enabled" or "Bots disabled")
     else
         Chat.add("Only the host can toggle bots")
     end

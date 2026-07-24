@@ -360,6 +360,8 @@ local function check_hook_hits(state, dt)
             local dist = math.sqrt((cx - ex) ^ 2 + (cy - ey) ^ 2)
             if h.initial_dist == 0 or dist <= h.initial_dist * 0.3 then
                 player.hook = nil
+            elseif is_bot and state.is_host then
+                p:applyPull(cx, cy, h.dx, h.dy)
             else
                 Network.send_pull(h.target_id, cx, cy, h.dx, h.dy)
             end
