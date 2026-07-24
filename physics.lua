@@ -3,9 +3,8 @@
 
 local Physics = {}
 
-function Physics.update(player, dt, input)
-    player:handleInput(input)
-    player:update(dt)
+function Physics.update(player, dt, cmd)
+    player:update(dt, cmd)
 end
 
 function Physics.take_damage(player, amount, attacker_vx, attack_type)
