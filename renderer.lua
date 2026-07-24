@@ -3,22 +3,17 @@ local config = require "config"
 local Renderer = {}
 local V = require "visuals"
 
-local damage_texts = {}
+local OUTLINE_MAP = {
+    frozen = config.OUTLINE_FROZEN,
+    hooked = config.OUTLINE_HOOKED,
+    cooldown = config.OUTLINE_LOCKED,
+}
 
 local function get_outline_color(ent)
     if ent.getCurrentOutlineColor then
         return ent:getCurrentOutlineColor()
     end
-    if ent.slow_timer and ent.slow_timer > 0 then
-        return config.OUTLINE_FROZEN
-    end
-    if ent.being_hooked then
-        return config.OUTLINE_HOOKED
-    end
-    if ent.combat_cooldown and ent.combat_cooldown > 0 then
-        return config.OUTLINE_LOCKED
-    end
-    return config.OUTLINE_DEFAULT
+    return OUTLINE_MAP[ent.state] or config.OUTLINE_DEFAULT
 end
 
 local function normalize_view(ent, meta)
@@ -36,9 +31,7 @@ local function normalize_view(ent, meta)
         move_facing = ent.facing or 1,
         attack_facing = ent.attack_facing or ent.view_facing or ent.facing or 0,
         attack_type = ent.attack_type,
-        slow_timer = ent.slow_timer or 0,
-        combat_cooldown = ent.combat_cooldown or 0,
-        being_hooked = ent.being_hooked or ent.pull_toward ~= nil,
+        state = ent.state,
         hook = ent.hook,
         is_local = meta.is_local or false,
         dash_timer = ent.dash_timer or 0,
@@ -177,14 +170,7 @@ function Renderer.draw(render_list)
         draw_hook(v.hook, v.x, v.y, v.h)
     end
 
-    for _, t in ipairs(damage_texts) do
-        local alpha = math.min(1, t.timer / (t.max_timer * 0.3))
-        local c = t.color or {1, 1, 1}
-        love.graphics.setColor(c[1], c[2], c[3], alpha)
-        local font = love.graphics.getFont()
-        local tw = font:getWidth(t.text) * 0.35
-        love.graphics.print(t.text, t.x - tw / 2, t.y, 0, 0.35, 0.35)
-    end
+    V.draw_damage_texts()
 
     love.graphics.pop()
 end
@@ -221,37 +207,11 @@ function Renderer.draw_cooldowns(local_player)
 end
 
 function Renderer.add_damage(x, y, amount, color)
-    if amount <= 0 then return end
-    table.insert(damage_texts, {
-        x = x + config.SPRITE_SIZE / 2,
-        y = y - 5,
-        text = "-" .. amount,
-        timer = 0.8,
-        max_timer = 0.8,
-        color = color or {1, 1, 1}
-    })
-end
-
-function Renderer.add_clash(x, y)
-    table.insert(damage_texts, {
-        x = x,
-        y = y,
-        text = "*clash*",
-        timer = 0.6,
-        max_timer = 0.6,
-        color = {1, 0.85, 0.2}
-    })
+    V.spawnDamageMarker(x, y, amount, color)
 end
 
 function Renderer.update_damage_texts(dt)
-    for i = #damage_texts, 1, -1 do
-        local t = damage_texts[i]
-        t.timer = t.timer - dt
-        t.y = t.y - 30 * dt
-        if t.timer <= 0 then
-            table.remove(damage_texts, i)
-        end
-    end
+    V.update_damage_texts(dt)
 end
 
 return Renderer

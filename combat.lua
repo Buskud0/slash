@@ -1,8 +1,7 @@
 local config = require "config"
 local Helpers = require "helpers"
 local Network = require "network"
-local Physics = require "physics"
-local Renderer = require "renderer"
+local Visuals = require "visuals"
 
 local Combat = {}
 local last_hit_by = {}
@@ -90,11 +89,9 @@ local function check_sword_collisions(state)
                         last_hit_by[hit_key] = attack_id
                         local at = p.attack_type or ""
                         local damage = Helpers.get_attack_damage(at)
-                        Physics.apply_knockback(bot, contact_angle, nil, p.air_velocity_x, at)
-                        if not bot.invincible then
-                            Physics.take_damage(bot, damage)
-                        end
-                        Renderer.add_damage(bot.x, bot.y, damage)
+                        bot:applyKnockback(contact_angle, nil, p.air_velocity_x, at)
+                        bot:takeDamage(damage)
+                        Visuals.spawnDamageMarker(bot.x, bot.y, damage)
                     end
                 end
             end
@@ -112,11 +109,9 @@ local function check_sword_collisions(state)
                 if check_line_collision(cx, cy, tx, ty, bx, by, bw, bh) then
                     last_hit_by[hit_key] = attack_id
                     local at = bot.attack_type or ""
-                    Physics.apply_knockback(player, contact_angle, nil, bot.air_velocity_x, at)
-
                     local damage = Helpers.get_attack_damage(at)
-                    Physics.take_damage(player, damage)
-                    Renderer.add_damage(player.x, player.y, damage, {1, 0.3, 0.3})
+                    player:applyEffect("sword", {angle=contact_angle, attacker_vx=bot.air_velocity_x, attack_type=at})
+                    Visuals.spawnDamageMarker(player.x, player.y, damage, {1, 0.3, 0.3})
                 end
             end
         end
@@ -138,18 +133,14 @@ local function check_sword_collisions(state)
 
                     if is_bot then
                         if state.is_host then
-                            Physics.apply_knockback(target, contact_angle, nil, player.air_velocity_x, at)
-                            if not target.invincible then
-                                Physics.take_damage(target, damage)
-                            end
+                            target:applyEffect("sword", {angle=contact_angle, attacker_vx=player.air_velocity_x, attack_type=at})
                         else
                             Network.send_damage(key, damage, contact_angle, config.BASE_KNOCKBACK, 0, player.air_velocity_x, at)
                         end
-                        Renderer.add_damage(target.x, target.y, damage)
                     else
                         Network.send_damage(key, damage, contact_angle, config.BASE_KNOCKBACK, 0, player.air_velocity_x, at)
-                        Renderer.add_damage(target.x, target.y, damage)
                     end
+                    Visuals.spawnDamageMarker(target.x, target.y, damage)
                 end
             end
         end)
@@ -189,7 +180,7 @@ local function check_projectile_collisions(state)
             for pi, proj in ipairs(ActiveProjectiles) do
                 if not removed_projectiles[proj] and proj.type == "freeze" and hook_bullet_close(hooks[hi].h, proj) then
                     local hx, hy = hooks[hi].h.x, hooks[hi].h.y
-                    Renderer.add_clash((hx + proj.x) / 2, (hy + proj.y) / 2)
+                    Visuals.spawnClashMarker((hx + proj.x) / 2, (hy + proj.y) / 2)
                     removed_hooks[hi] = true
                     removed_projectiles[proj] = true
                 end
@@ -203,7 +194,7 @@ local function check_projectile_collisions(state)
                 if not removed_hooks[hj] then
                     local a, b = hooks[hi].h, hooks[hj].h
                     if math.abs(a.x - b.x) < half_hook * 2 and math.abs(a.y - b.y) < half_hook * 2 then
-                        Renderer.add_clash((a.x + b.x) / 2, (a.y + b.y) / 2)
+                        Visuals.spawnClashMarker((a.x + b.x) / 2, (a.y + b.y) / 2)
                         removed_hooks[hi] = true
                         removed_hooks[hj] = true
                     end
@@ -218,7 +209,7 @@ local function check_projectile_collisions(state)
                 if not removed_projectiles[ActiveProjectiles[pj]] then
                     local a, b = ActiveProjectiles[pi], ActiveProjectiles[pj]
                     if a.type == "freeze" and b.type == "freeze" and math.abs(a.x - b.x) < config.FREEZE_BOLT_SIZE and math.abs(a.y - b.y) < config.FREEZE_BOLT_SIZE then
-                        Renderer.add_clash((a.x + b.x) / 2, (a.y + b.y) / 2)
+                        Visuals.spawnClashMarker((a.x + b.x) / 2, (a.y + b.y) / 2)
                         removed_projectiles[a] = true
                         removed_projectiles[b] = true
                     end
@@ -254,7 +245,7 @@ local function check_projectile_collisions(state)
                 local hk = hooks[hi].h
                 local hk_half = config.HOOK_SIZE / 2
                 if check_line_collision(sw.cx, sw.cy, sw.tx, sw.ty, hk.x - hk_half, hk.y - hk_half, config.HOOK_SIZE, config.HOOK_SIZE) then
-                    Renderer.add_clash((sw.tx + hk.x) / 2, (sw.ty + hk.y) / 2)
+                    Visuals.spawnClashMarker((sw.tx + hk.x) / 2, (sw.ty + hk.y) / 2)
                     removed_hooks[hi] = true
                 end
             end
@@ -262,7 +253,7 @@ local function check_projectile_collisions(state)
         for _, proj in ipairs(ActiveProjectiles) do
             if not removed_projectiles[proj] and proj.type == "freeze" and proj.owner ~= sw.entity then
                 if check_line_collision(sw.cx, sw.cy, sw.tx, sw.ty, proj.x - half_net, proj.y - half_net, config.FREEZE_BOLT_SIZE, config.FREEZE_BOLT_SIZE) then
-                    Renderer.add_clash((sw.tx + proj.x) / 2, (sw.ty + proj.y) / 2)
+                    Visuals.spawnClashMarker((sw.tx + proj.x) / 2, (sw.ty + proj.y) / 2)
                     removed_projectiles[proj] = true
                 end
             end
@@ -283,7 +274,7 @@ local function check_projectile_collisions(state)
                     if t >= 0 and t <= 1 and u >= 0 and u <= 1 then
                         local ix = a.cx + dx1 * t
                         local iy = a.cy + dy1 * t
-                        Renderer.add_clash(ix, iy)
+                        Visuals.spawnClashMarker(ix, iy)
                         removed_swords[swords[i]] = true
                         removed_swords[swords[j]] = true
                     end
@@ -311,13 +302,13 @@ local function check_bullet_hits(state)
         local proj = ActiveProjectiles[pi]
         if proj.type ~= "freeze" then goto skip end
         local is_local_bullet = proj.owner == state.local_player
-        local is_controlled = is_local_bullet or proj._is_bot_bullet or (state.is_host and proj.owner and proj.owner.getHit)
+        local is_controlled = is_local_bullet or proj._is_bot_bullet or (state.is_host and proj.owner and proj.owner.applyEffect)
         if not is_controlled then goto skip end
 
         local lbx, lby, lbw, lbh = Helpers.get_entity_hitbox(state.local_player)
         if proj.x >= lbx and proj.x <= lbx + lbw and proj.y >= lby and proj.y <= lby + lbh then
             if proj.owner ~= state.local_player then
-                state.local_player:getHit(proj)
+                state.local_player:applyEffect("freeze", {projectile = proj})
                 Combat.remove_projectile(proj)
                 goto skip
             end
@@ -328,16 +319,16 @@ local function check_bullet_hits(state)
             local bx, by, bw, bh = Helpers.get_entity_hitbox(target)
             if proj.x >= bx and proj.x <= bx + bw and proj.y >= by and proj.y <= by + bh then
                 local kb_angle = math.atan2(proj.dy, proj.dx)
-                if target.getHit then
-                    target:getHit(proj)
+                if target.applyEffect then
+                    target:applyEffect("freeze", {projectile = proj})
                 end
                 if is_local_bullet then
                     if not state.is_host then
                         Network.send_damage(key, 0, kb_angle, config.FREEZE_BOLT_KNOCKBACK_FORCE, config.FREEZE_BOLT_SLOW_DURATION)
-                    elseif not target.getHit then
+                    elseif not target.applyEffect then
                         Network.send_damage(key, 0, kb_angle, config.FREEZE_BOLT_KNOCKBACK_FORCE, config.FREEZE_BOLT_SLOW_DURATION)
                     end
-                elseif state.is_host and not target.getHit then
+                elseif state.is_host and not target.applyEffect then
                     Network.send_damage(key, 0, kb_angle, config.FREEZE_BOLT_KNOCKBACK_FORCE, config.FREEZE_BOLT_SLOW_DURATION)
                 end
                 Combat.remove_projectile(proj)
@@ -415,7 +406,7 @@ local function check_bot_hook_hits(state)
                     bot.hook = nil
                 else
                     if h.target_id == "local" then
-                        Physics.apply_pull(state.local_player, bcx, bcy, h.dx, h.dy)
+                        state.local_player:applyPull(bcx, bcy, h.dx, h.dy)
                     else
                         Network.send_pull(h.target_id, bcx, bcy, h.dx, h.dy)
                     end

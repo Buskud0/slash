@@ -37,23 +37,32 @@ function Player.new(spawn_x, spawn_y, main_color)
     self.hook_cooldown = 0
     self.pull_toward = nil
     self.speed_mult = 1.0
-    self.effects = {}
+    self.state = nil
     self.mainColor = main_color or {0, 0.75, 0}
     self.name = ""
     return self
 end
 
-function Player:syncEffects()
-    self.effects.frozen = self.slow_timer > 0
-    self.effects.hooked = self.pull_toward ~= nil
-    self.effects.locked = self.combat_cooldown > 0 and not self.effects.hooked
+local STATE_OUTLINES = {
+    frozen = config.OUTLINE_FROZEN,
+    hooked = config.OUTLINE_HOOKED,
+    cooldown = config.OUTLINE_LOCKED,
+}
+
+function Player:updateState()
+    if self.slow_timer > 0 then
+        self.state = "frozen"
+    elseif self.pull_toward ~= nil then
+        self.state = "hooked"
+    elseif self.combat_cooldown > 0 then
+        self.state = "cooldown"
+    else
+        self.state = nil
+    end
 end
 
 function Player:getCurrentOutlineColor()
-    if self.effects.frozen then return config.OUTLINE_FROZEN end
-    if self.effects.hooked then return config.OUTLINE_HOOKED end
-    if self.effects.locked then return config.OUTLINE_LOCKED end
-    return config.OUTLINE_DEFAULT
+    return STATE_OUTLINES[self.state] or config.OUTLINE_DEFAULT
 end
 
 local function angle_from_aim(self, cmd)
@@ -373,8 +382,18 @@ function Player:update(dt, cmd)
     return self
 end
 
-function Player:takeDamage(amount, attacker_vx, attack_type)
-    self.health = math.max(0, self.health - amount)
+function Player:setHealth(val)
+    self.health = math.max(0, math.min(val, config.MAX_HEALTH))
+end
+
+function Player:getHealth()
+    return self.health
+end
+
+function Player:takeDamage(amount)
+    if not self.invincible then
+        self:setHealth(self.health - amount)
+    end
     self.hit_gravity_timer = config.HIT_GRAVITY_DURATION
     self.attack_timer = 0
     self.attack_type = nil
@@ -415,22 +434,28 @@ function Player:applySlow(duration)
     self.slow_timer = math.max(self.slow_timer, dur)
 end
 
-function Player:clearCooldown(at)
-    local key = at:sub(1, 4) == "stab" and "stab" or "swing"
-    self.cooldowns[key] = 0
-end
-
-function Player:getHit(proj)
-    if proj.type == "freeze" then
-        local angle = math.atan2(proj.dy, proj.dx)
+function Player:applyEffect(effect_type, params)
+    if effect_type == "freeze" then
+        local px = params.projectile
+        local angle = math.atan2(px.dy, px.dx)
         self:applyKnockback(angle, config.FREEZE_BOLT_KNOCKBACK_FORCE)
         self:applySlow(config.FREEZE_BOLT_SLOW_DURATION)
         self.combat_cooldown = config.COMBAT_COOLDOWN
+        return 0
+    elseif effect_type == "sword" then
+        local at = params.attack_type or ""
+        local damage = Helpers.get_attack_damage(at)
+        self:applyKnockback(params.angle, nil, params.attacker_vx, at)
+        self:takeDamage(damage)
+        return damage
+    elseif effect_type == "net_damage" then
+        self:takeDamage(params.amount)
+        self:applyKnockback(params.angle, params.force, params.attacker_vx, params.attack_type or "")
+        if params.slow and params.slow > 0 then
+            self:applySlow(params.slow)
+        end
+        return params.amount
     end
-end
-
-function Player:clearPull()
-    self.pull_toward = nil
 end
 
 function Player:to_view()
@@ -444,9 +469,7 @@ function Player:to_view()
         attack_id = self.attack_id,
         attack_type = self.attack_type,
         health = self.health,
-        slow_timer = self.slow_timer or 0,
-        combat_cooldown = self.combat_cooldown or 0,
-        being_hooked = self.pull_toward ~= nil,
+        state = self.state,
         air_velocity_x = self.air_velocity_x or 0,
         dash_timer = self.dash_timer or 0,
         bullets = self.bullets,

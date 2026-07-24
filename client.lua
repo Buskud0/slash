@@ -7,7 +7,6 @@ local Chat = require "chat"
 local Menu = require "menu"
 local Helpers = require "helpers"
 local Controllers = require "controllers"
-local Physics = require "physics"
 local Combat = require "combat"
 
 local Client = {}
@@ -125,7 +124,7 @@ local function run_client(dt)
             bot.invincible = settings.invincible
             local bot_cmd = Controllers.Bot.get_cmd(bot, enemies, settings, dt)
             bot:update(dt, bot_cmd)
-            bot:syncEffects()
+            bot:updateState()
         end
         Network.send_bots(encode_bots(bots))
     else
@@ -147,22 +146,29 @@ local function run_client(dt)
                 local bi = tonumber(pending_damage.target_id:sub(5))
                 local bot = bots[bi]
                 if bot then
-                    Physics.apply_knockback(bot, pending_damage.knockback, pending_damage.force, pending_damage.attacker_vx, pending_damage.attack_type)
-                    Physics.apply_net_slow(bot, pending_damage.slow)
-                    if pending_damage.amount > 0 then
-                        Physics.take_damage(bot, pending_damage.amount)
-                        Renderer.add_damage(bot.x, bot.y, pending_damage.amount)
+                    local dmg = bot:applyEffect("net_damage", {
+                        amount = pending_damage.amount,
+                        angle = pending_damage.knockback,
+                        force = pending_damage.force,
+                        attacker_vx = pending_damage.attacker_vx,
+                        attack_type = pending_damage.attack_type,
+                        slow = pending_damage.slow,
+                    })
+                    if dmg > 0 then
+                        Renderer.add_damage(bot.x, bot.y, dmg)
                     end
-                    bot.combat_cooldown = config.COMBAT_COOLDOWN
                 end
             end
         else
-            Physics.take_damage(local_player, pending_damage.amount)
-            Renderer.add_damage(local_player.x, local_player.y, pending_damage.amount, {1, 0.3, 0.3})
-            Physics.apply_knockback(local_player, pending_damage.knockback, pending_damage.force, pending_damage.attacker_vx, pending_damage.attack_type)
-            if pending_damage.slow and pending_damage.slow > 0 then
-                Physics.apply_net_slow(local_player, pending_damage.slow)
-            end
+            local dmg = local_player:applyEffect("net_damage", {
+                amount = pending_damage.amount,
+                angle = pending_damage.knockback,
+                force = pending_damage.force,
+                attacker_vx = pending_damage.attacker_vx,
+                attack_type = pending_damage.attack_type,
+                slow = pending_damage.slow,
+            })
+            Renderer.add_damage(local_player.x, local_player.y, dmg, {1, 0.3, 0.3})
         end
         Network.pending_damage = nil
     end
@@ -172,10 +178,10 @@ local function run_client(dt)
             local bi = tonumber(pending_pull.target_id:sub(5))
             local bot = bots[bi]
             if bot and is_host then
-                Physics.apply_pull(bot, pending_pull.x, pending_pull.y, pending_pull.dx, pending_pull.dy)
+                bot:applyPull(pending_pull.x, pending_pull.y, pending_pull.dx, pending_pull.dy)
             end
         else
-            Physics.apply_pull(local_player, pending_pull.x, pending_pull.y, pending_pull.dx, pending_pull.dy)
+            local_player:applyPull(pending_pull.x, pending_pull.y, pending_pull.dx, pending_pull.dy)
         end
         Network.pending_pull = nil
     end
@@ -208,7 +214,7 @@ local function run_client(dt)
         bots = bots,
         is_host = is_host,
     }, dt)
-    local_player:syncEffects()
+    local_player:updateState()
 
     if lost then
         game_state = "connecting"

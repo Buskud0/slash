@@ -77,7 +77,12 @@ end
 
 function Helpers.encode_entity(entity)
     local attack_facing = entity.attack_facing or entity.view_facing or entity.facing
-    local s = string.format("%d,%d,%d,%d,%d,%s,%d,%d,%d,%d,%.1f,%.1f,%d,%d,%.3f",
+    local state_id = 0
+    if entity.state == "frozen" then state_id = 1
+    elseif entity.state == "hooked" then state_id = 2
+    elseif entity.state == "cooldown" then state_id = 3
+    end
+    local s = string.format("%d,%d,%d,%d,%d,%s,%d,%d,%d,%.1f,%d,%d,%.3f",
         math.floor(entity.x), math.floor(entity.y),
         math.floor(entity.height),
         math.floor(entity.facing * 100),
@@ -85,12 +90,10 @@ function Helpers.encode_entity(entity)
         entity.attack_type or "none",
         entity.attack_id or 0,
         entity.health or config.MAX_HEALTH,
-        math.floor((entity.slow_timer or 0) * 100),
         math.floor((entity.air_velocity_x or 0) * 100),
         (entity.dash_timer or 0) * 100,
-        (entity.combat_cooldown or 0) * 100,
-        (entity.being_hooked or entity.pull_toward) and 1 or 0,
         entity.invincible and 1 or 0,
+        state_id,
         attack_facing)
     local bullets = entity.bullets or {}
     if #bullets > 0 then
@@ -116,19 +119,15 @@ function Helpers.encode_entity(entity)
     return s
 end
 
+local STATE_NAMES = { [0]="none", [1]="frozen", [2]="hooked", [3]="cooldown" }
+
 function Helpers.decode_entity(raw)
     local main = raw:match("^(.-),b:")
     if not main then return nil end
-    local pAF = main:match("^[^,]+,[^,]+,[^,]+,[^,]+,[^,]+,[^,]+,[^,]+,[^,]+,[^,]+,[^,]+,[^,]+,[^,]+,[^,]+,[^,]+,([^,]+)$")
-    local px, py, ph, pf, pa, pat, paid, phealth, pslow, pavx, pDash, pCC, pHook, pInv
-    if pAF then
-        px, py, ph, pf, pa, pat, paid, phealth, pslow, pavx, pDash, pCC, pHook, pInv = main:match(
-            "([^,]+),([^,]+),([^,]+),([^,]+),([^,]+),([^,]+),([^,]+),([^,]+),([^,]+),([^,]+),([^,]+),([^,]+),([^,]+),([^,]+)")
-    else
-        px, py, ph, pf, pa, pat, paid, phealth, pslow, pavx, pDash, pCC, pHook, pInv = main:match(
-            "([^,]+),([^,]+),([^,]+),([^,]+),([^,]+),([^,]+),([^,]+),([^,]+),([^,]+),([^,]+),([^,]+),([^,]+),([^,]+),([^,]+)")
-    end
+    local px, py, ph, pf, pa, pat, paid, phealth, pavx, pDash, pInv, pState, pAF = main:match(
+        "([^,]+),([^,]+),([^,]+),([^,]+),([^,]+),([^,]+),([^,]+),([^,]+),([^,]+),([^,]+),([^,]+),([^,]+),([^,]+)")
     if not px then return nil end
+    local state_str = STATE_NAMES[tonumber(pState) or 0]
     local entity = {
         x = tonumber(px), y = tonumber(py),
         height = tonumber(ph),
@@ -138,12 +137,10 @@ function Helpers.decode_entity(raw)
         attack_type = pat ~= "none" and pat or nil,
         attack_id = tonumber(paid) or 0,
         health = tonumber(phealth) or config.MAX_HEALTH,
-        slow_timer = tonumber(pslow) or 0,
         air_velocity_x = (tonumber(pavx) or 0) / 100,
         dash_timer = (tonumber(pDash) or 0) / 100,
-        combat_cooldown = (tonumber(pCC) or 0) / 100,
-        being_hooked = (tonumber(pHook) or 0) == 1,
         invincible = (tonumber(pInv) or 0) == 1,
+        state = state_str ~= "none" and state_str or nil,
         bullets = {}, hook = nil
     }
     local bullets_str = raw:match(",b:(.-),k:")

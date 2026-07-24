@@ -4,6 +4,8 @@ local Helpers = require "helpers"
 local V = {}
 local VCfg = config.VISUALS
 
+V.damage_texts = {}
+
 function V.draw_background()
     local c = VCfg.BACKGROUND_COLOR
     love.graphics.setColor(c[1], c[2], c[3])
@@ -163,6 +165,51 @@ function V.draw_dash_trails(player, trail_positions, alpha_mult)
             love.graphics.setColor(pos.r or 1, pos.g or 1, pos.b or 1, alpha)
             love.graphics.rectangle("fill", pos.x, pos.y, config.SPRITE_SIZE, pos.h or config.PLAYER_STAND_HEIGHT)
         end
+    end
+end
+
+function V.spawnDamageMarker(x, y, amount, color)
+    if amount <= 0 then return end
+    table.insert(V.damage_texts, {
+        x = x + config.SPRITE_SIZE / 2,
+        y = y - 5,
+        text = "-" .. amount,
+        timer = 0.8,
+        max_timer = 0.8,
+        color = color or {1, 1, 1}
+    })
+end
+
+function V.spawnClashMarker(x, y)
+    table.insert(V.damage_texts, {
+        x = x,
+        y = y,
+        text = "*clash*",
+        timer = 0.6,
+        max_timer = 0.6,
+        color = {1, 0.85, 0.2}
+    })
+end
+
+function V.update_damage_texts(dt)
+    for i = #V.damage_texts, 1, -1 do
+        local t = V.damage_texts[i]
+        t.timer = t.timer - dt
+        t.y = t.y - 30 * dt
+        if t.timer <= 0 then
+            table.remove(V.damage_texts, i)
+        end
+    end
+end
+
+function V.draw_damage_texts()
+    for _, t in ipairs(V.damage_texts) do
+        local alpha = math.min(1, t.timer / (t.max_timer * 0.3))
+        local c = t.color or {1, 1, 1}
+        love.graphics.setColor(c[1], c[2], c[3], alpha)
+        local font = love.graphics.getFont()
+        local tw = font:getWidth(t.text) * 0.35
+        love.graphics.print(t.text, t.x - tw / 2, t.y, 0, 0.35, 0.35)
     end
 end
 

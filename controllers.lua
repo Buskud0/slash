@@ -154,18 +154,4 @@ function Controllers.Bot.get_cmd(bot, enemies, settings, dt)
     return cmd
 end
 
-Controllers.Network = {}
-
-function Controllers.Network.new()
-    return {
-        cmd = Controllers.empty_cmd(),
-        set_cmd = function(self, new_cmd)
-            self.cmd = new_cmd
-        end,
-        get_cmd = function(self)
-            return self.cmd
-        end,
-    }
-end
-
 return Controllers
