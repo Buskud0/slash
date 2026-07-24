@@ -427,12 +427,7 @@ function Player:takeDamage(amount)
         self.combat_cooldown = config.COMBAT_COOLDOWN
     end
     if self.health <= 0 then
-        self.x = config.SPAWN_X
-        self.y = config.SPAWN_Y
-        self.y_velocity = 0
-        self.knockback_x = 0
-        self.is_on_ground = false
-        self.health = config.MAX_HEALTH
+        self.health = 0
     end
 end
 
@@ -498,6 +493,7 @@ function Player:to_view()
         attack_type = self.attack_type,
         health = self.health,
         state = self.state,
+        invincible = self.invincible,
         air_velocity_x = self.air_velocity_x or 0,
         dash_timer = self.dash_timer or 0,
         bullets = self.bullets,

@@ -9,7 +9,9 @@ local Network = {
     my_id = nil, 
     players = {},
     pending_damage = nil,
-    pending_pull = nil
+    pending_pull = nil,
+    pending_invincible = nil,
+    pending_reset = nil
 }
 
 function Network.init()
@@ -43,7 +45,21 @@ function Network.send_pull(target_id, target_x, target_y, hook_dx, hook_dy)
     end
 end
 
+function Network.send_inv(state)
+    if Network.server then
+        Network.server:send("inv:" .. (state and "1" or "0"), 0, "reliable")
+    end
+end
 
+function Network.send_reset(score_a, score_b, winner)
+    local w = "n"
+    if winner == "left" then w = "l"
+    elseif winner == "right" then w = "r"
+    end
+    if Network.server then
+        Network.server:send("reset:" .. score_a .. "," .. score_b .. "," .. w, 0, "reliable")
+    end
+end
 
 local function parse_state(payload)
     local active = {}
@@ -105,6 +121,10 @@ function Network.update(local_player)
                                 dy = tonumber(dy)
                             }
                         end
+                    elseif data:sub(1, 4) == "inv:" then
+                        Network.pending_invincible = data:sub(5) == "1"
+                    elseif data:sub(1, 6) == "reset:" then
+                        Network.pending_reset = data:sub(7)
                     end
                 elseif event.type == "disconnect" then
                     Network.my_id = nil
@@ -119,7 +139,7 @@ function Network.update(local_player)
         end
     end
 
-    return Network.players, Network.my_id, lost_connection, Network.pending_damage, Network.pending_pull
+    return Network.players, Network.my_id, lost_connection, Network.pending_damage, Network.pending_pull, Network.pending_invincible, Network.pending_reset
 end
 
 function Network.quit()

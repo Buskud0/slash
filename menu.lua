@@ -2,6 +2,7 @@ local Helpers = require "helpers"
 
 local Menu = {}
 Menu.is_open = false
+Menu.lobby_invincible = false
 
 local screen = "main"
 
@@ -14,7 +15,6 @@ local defaults = {
     allow_hook = true,
     allow_jump = true,
     allow_dash = false,
-    invincible = false,
     movement = "chase",
 }
 
@@ -26,6 +26,7 @@ local toggle_bots_pending = false
 
 local main_items = {
     { label = "Bot Settings", action = function() screen = "bots" end },
+    { label = "Lobby Settings", action = function() screen = "lobby" end },
 }
 
 local attack_toggles = {
@@ -41,7 +42,7 @@ local movement_modes = {
     { key = "to_center",   label = "Walk to Center" },
 }
 
-local bool_keys = {"allow_stab", "allow_swing", "allow_freeze_bolt", "allow_hook", "allow_jump", "allow_dash", "invincible"}
+local bool_keys = {"allow_stab", "allow_swing", "allow_freeze_bolt", "allow_hook", "allow_jump", "allow_dash"}
 
 local function save_settings()
     local lines = {}
@@ -135,6 +136,10 @@ function Menu.get_settings()
     return bot_settings
 end
 
+function Menu.get_lobby_invincible()
+    return Menu.lobby_invincible
+end
+
 function Menu.set_bots_enabled(enabled)
     bots_enabled = enabled
 end
@@ -211,14 +216,7 @@ function Menu.mousepressed(mx, my)
             end
         end
 
-        local inv_y = ry + #movement_modes * mode_gap * s + section_gap * s
-        if Helpers.get_hitbox(right_x, inv_y, right_w * s, toggle_h * s) then
-            bot_settings.invincible = not bot_settings.invincible
-            save_settings()
-            return
-        end
-
-        local jump_y = inv_y + toggle_h * s + section_gap * s
+        local jump_y = ry + #movement_modes * mode_gap * s + section_gap * s
         if bot_settings.movement == "chase" and Helpers.get_hitbox(right_x, jump_y, right_w * s, toggle_h * s) then
             bot_settings.allow_jump = not bot_settings.allow_jump
             save_settings()
@@ -256,6 +254,31 @@ function Menu.mousepressed(mx, my)
             screen = "main"
             return
         end
+
+    elseif screen == "lobby" then
+        local pw = 400
+        local toggle_h = 40
+        local back_h = 44
+        local title_h = 60
+        local section_gap = 20
+        local padding = 15
+        local raw_h = title_h + toggle_h + section_gap + back_h + padding
+        local pw_s = pw * s
+        local total_h = raw_h * s
+        local px = sw / 2 - pw_s / 2
+        local py = sh / 2 - total_h / 2
+        local y = py + title_h * s
+
+        if Helpers.get_hitbox(px + 10 * s, y, (pw - 20) * s, toggle_h * s) then
+            Menu.lobby_invincible = not Menu.lobby_invincible
+            return
+        end
+
+        local back_y = py + title_h * s + toggle_h * s + section_gap * s
+        if Helpers.get_hitbox(px, back_y, pw_s, back_h * s) then
+            screen = "main"
+            return
+        end
     end
 end
 
@@ -274,6 +297,8 @@ function Menu.keypressed(key)
     if screen == "main" then
         if key == "1" then
             screen = "bots"
+        elseif key == "2" then
+            screen = "lobby"
         end
 
     elseif screen == "bots" then
@@ -282,15 +307,19 @@ function Menu.keypressed(key)
         elseif key == "2" then bot_settings.movement = "chase"
         elseif key == "3" then bot_settings.movement = "stand_still"
         elseif key == "4" then bot_settings.movement = "to_center"
-        elseif key == "5" then bot_settings.invincible = not bot_settings.invincible
-        elseif key == "6" and bot_settings.movement == "chase" then bot_settings.allow_jump = not bot_settings.allow_jump
-        elseif key == "7" and bot_settings.movement == "chase" then bot_settings.allow_stab = not bot_settings.allow_stab
-        elseif key == "8" and bot_settings.movement == "chase" then bot_settings.allow_swing = not bot_settings.allow_swing
-        elseif key == "9" and bot_settings.movement == "chase" then bot_settings.allow_freeze_bolt = not bot_settings.allow_freeze_bolt
-        elseif key == "0" and bot_settings.movement == "chase" then bot_settings.allow_hook = not bot_settings.allow_hook
+        elseif key == "5" and bot_settings.movement == "chase" then bot_settings.allow_jump = not bot_settings.allow_jump
+        elseif key == "6" and bot_settings.movement == "chase" then bot_settings.allow_stab = not bot_settings.allow_stab
+        elseif key == "7" and bot_settings.movement == "chase" then bot_settings.allow_swing = not bot_settings.allow_swing
+        elseif key == "8" and bot_settings.movement == "chase" then bot_settings.allow_freeze_bolt = not bot_settings.allow_freeze_bolt
+        elseif key == "9" and bot_settings.movement == "chase" then bot_settings.allow_hook = not bot_settings.allow_hook
         else changed = false
         end
         if changed then save_settings() end
+
+    elseif screen == "lobby" then
+        if key == "1" then
+            Menu.lobby_invincible = not Menu.lobby_invincible
+        end
     end
 end
 
@@ -308,6 +337,8 @@ function Menu.draw()
         Menu.draw_main(sw, sh, s)
     elseif screen == "bots" then
         Menu.draw_bots(sw, sh, s)
+    elseif screen == "lobby" then
+        Menu.draw_lobby(sw, sh, s)
     end
 end
 
@@ -353,7 +384,7 @@ function Menu.draw_bots(sw, sh, s)
     local left_col_h = label_h + #movement_modes * mode_gap
         + section_gap + toggle_h
         + section_gap + label_h + #attack_toggles * toggle_gap
-    local right_col_h = label_h + toggle_h + section_gap + toggle_h + section_gap + toggle_h
+    local right_col_h = label_h + toggle_h + section_gap + toggle_h
     local content_h = math.max(left_col_h, right_col_h)
 
     local raw_h = title_h + content_h + section_gap + back_h + padding
@@ -393,12 +424,9 @@ function Menu.draw_bots(sw, sh, s)
         draw_radio_item(right_x + 10 * s, iy, right_w * s, mode_h * s, s, mode.label, bot_settings.movement == mode.key)
     end
 
-    local inv_y = ry + #movement_modes * mode_gap * s + section_gap * s
-    draw_toggle(right_x + 10 * s, inv_y, right_w * s, toggle_h * s, s, "Invincible", bot_settings.invincible, false)
-
     local grayed = bot_settings.movement ~= "chase"
 
-    local jump_y = inv_y + toggle_h * s + section_gap * s
+    local jump_y = ry + #movement_modes * mode_gap * s + section_gap * s
     draw_toggle(right_x + 10 * s, jump_y, right_w * s, toggle_h * s, s, "Jumping", bot_settings.allow_jump, grayed)
 
     local dash_y = jump_y + toggle_h * s + section_gap * s
@@ -417,6 +445,37 @@ function Menu.draw_bots(sw, sh, s)
     end
 
     local back_y = py + title_h * s + content_h * s + section_gap * s
+    local hovered = Helpers.get_hitbox(px, back_y, pw_s, back_h * s)
+    love.graphics.setColor(hovered and 0.4 or 0.3, hovered and 0.2 or 0.15, hovered and 0.2 or 0.15, 0.9)
+    love.graphics.rectangle("fill", px + 10 * s, back_y, pw_s - 20 * s, back_h * s, 6 * s, 6 * s)
+    love.graphics.setColor(1, 1, 1)
+    love.graphics.print("< Back", px + 30 * s, back_y + 10 * s, 0, 1.2 * s, 1.2 * s)
+end
+
+function Menu.draw_lobby(sw, sh, s)
+    local pw = 400
+    local toggle_h = 40
+    local back_h = 44
+    local title_h = 60
+    local section_gap = 20
+    local padding = 15
+    local raw_h = title_h + toggle_h + section_gap + back_h + padding
+    local pw_s = pw * s
+    local total_h = raw_h * s
+    local px = sw / 2 - pw_s / 2
+    local py = sh / 2 - total_h / 2
+
+    love.graphics.setColor(0.15, 0.15, 0.15, 0.95)
+    love.graphics.rectangle("fill", px, py, pw_s, total_h, 8 * s, 8 * s)
+
+    love.graphics.setColor(1, 1, 1)
+    local title = "Lobby Settings"
+    love.graphics.print(title, px + pw_s / 2 - love.graphics.getFont():getWidth(title) * 0.8 * s, py + 15 * s, 0, 1.6 * s, 1.6 * s)
+
+    local y = py + title_h * s
+    draw_toggle(px + 10 * s, y, (pw - 20) * s, toggle_h * s, s, "Invincible", Menu.lobby_invincible, false)
+
+    local back_y = py + title_h * s + toggle_h * s + section_gap * s
     local hovered = Helpers.get_hitbox(px, back_y, pw_s, back_h * s)
     love.graphics.setColor(hovered and 0.4 or 0.3, hovered and 0.2 or 0.15, hovered and 0.2 or 0.15, 0.9)
     love.graphics.rectangle("fill", px + 10 * s, back_y, pw_s - 20 * s, back_h * s, 6 * s, 6 * s)

@@ -71,6 +71,10 @@ local function on_receive(id, data)
                 target.peer:send("pull:" .. tx .. "," .. ty .. "," .. dx .. "," .. dy, 0, "reliable")
             end
         end
+    elseif data:sub(1, 4) == "inv:" then
+        Server.host:broadcast("inv:" .. data:sub(5), 0, "reliable")
+    elseif data:sub(1, 6) == "reset:" then
+        Server.host:broadcast(data, 0, "reliable")
     end
 end
 
